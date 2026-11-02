@@ -2,7 +2,7 @@
 PROJECT_ID := fde-bootcamp
 LOCATION   := us
 # APP_ID is set once the app is created in fde-bootcamp/locations/us, or passed via APP_ID=<id>
-APP_ID     ?=
+APP_ID     ?= d5500685-9bb1-402d-888d-ffe5409126ad
 AGENT_NAME := snehsm-FDEBootcamp-CHI-greenfield
 
 # Voice model for CES composite voice. Defaults to gemini-composite-v2.
