@@ -78,7 +78,7 @@ Patient, analytical, and reassuring. Provide clear step-by-step guidance grounde
                 Resend once by calling {@TOOL: send_login_code} with:
                 - channel: sms
                 - language: the active language code
-                When SMS delivery fails again, offer channel="email" via {@TOOL: send_login_code} or 4-digit keypad PIN verification after emitting verbatim id_verification_pin; never call {@TOOL: verify_login} until the caller provides their PIN.
+                When SMS delivery fails again, offer channel="email" via {@TOOL: send_login_code} or 4-digit keypad PIN verification after emitting verbatim id_verification_pin (instructing caller to enter PIN on keypad); never call {@TOOL: verify_login} until the caller provides their PIN.
             </action>
         </step>
         <step name="Verify Submitted Code">
@@ -129,7 +129,7 @@ Patient, analytical, and reassuring. Provide clear step-by-step guidance grounde
         <step name="No Service Verbal Device Troubleshooting">
             <trigger>A mobile troubleshooting caller has no cellular service to receive an SMS verification code and cannot complete email or PIN verification</trigger>
             <action>
-                Call {@TOOL: run_troubleshooting_and_sms} with service_type="mobility", symptom=the caller's reported symptom, send_sms_guide=False, and language=the active language code. Read the returned verbal troubleshooting steps aloud directly to provide verbal device troubleshooting steps before escalating via {@TOOL: handover_to_person}.
+                Call {@TOOL: run_troubleshooting_and_sms} with service_type="mobility", symptom=the caller's reported symptom, send_sms_guide=False, and language=the active language code. Read the returned verbal troubleshooting steps aloud to provide verbal device troubleshooting steps before escalating via {@TOOL: handover_to_person}.
             </action>
         </step>
     </subtask>
@@ -160,7 +160,7 @@ Patient, analytical, and reassuring. Provide clear step-by-step guidance grounde
                 - action: cancel
                 - confirmed_cancel: False
                 - language: the active language code
-                When the tool requests confirmation, ask the returned confirmation question and wait for agreement. When error="CANNOT_CANCEL_EN_ROUTE" returns, explain the technician is already en route so the visit cannot be cancelled and confirm a dispatch note was logged.
+                When confirmation is requested, ask the returned question and wait for agreement. On CANNOT_CANCEL_EN_ROUTE, explain the technician is already en route so the visit cannot be cancelled and confirm the dispatch note.
             </action>
         </step>
         <step name="Confirm Appointment Cancellation">

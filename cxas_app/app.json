@@ -1,7 +1,7 @@
 {
   "name": "c9ab923f-9599-49a0-8a16-48c5eebdb6df",
-  "displayName": "telco-v5-snehsm",
-  "description": "telco-v5-snehsm voice and chat agent.",
+  "displayName": "snehsm-FDEBootcamp-CHI-greenfield",
+  "description": "snehsm-FDEBootcamp-CHI-greenfield voice and chat agent.",
   "rootAgent": "router",
   "globalInstruction": "global_instruction.txt",
   "modelSettings": {
@@ -41,13 +41,13 @@
   },
   "loggingSettings": {
     "evaluationAudioRecordingConfig": {
-      "gcsBucket": "gs://google.com:nextgen-sandbox-eval-audio",
+      "gcsBucket": "gs://fde-bootcamp-eval-audio",
       "gcsPathPrefix": "eval-audio/$session"
     },
     "redactionConfig": {
       "enableRedaction": true,
-      "inspectTemplate": "projects/google.com:nextgen-sandbox/locations/us/inspectTemplates/telco-v5-snehsm-pii-inspect",
-      "deidentifyTemplate": "projects/google.com:nextgen-sandbox/locations/us/deidentifyTemplates/telco-v5-snehsm-pii-deidentify"
+      "inspectTemplate": "projects/fde-bootcamp/locations/us/inspectTemplates/snehsm-FDEBootcamp-CHI-greenfield-pii-inspect",
+      "deidentifyTemplate": "projects/fde-bootcamp/locations/us/deidentifyTemplates/snehsm-FDEBootcamp-CHI-greenfield-pii-deidentify"
     }
   },
   "timeZoneSettings": {
@@ -768,6 +768,438 @@
     {
       "name": "global_err_count",
       "description": "Total cumulative errors in session.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "clid",
+      "description": "10-digit caller ID from telephony.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "tfn",
+      "description": "Dialed toll-free number.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "cirn",
+      "description": "Customer inquiry reference number.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "billing_account",
+      "description": "Billing account identifier.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "user_id",
+      "description": "Internal CRM record id.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "identification_status",
+      "description": "Caller identification status: Pass or Fail.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "route",
+      "description": "Target capability module for dispatch.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "lob",
+      "description": "Line of business (mobility, internet, tv, homephone, smarthome).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "region",
+      "description": "Region identifier for coverage and outage lookups.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "utterance",
+      "description": "Latest caller intent text.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "dtmf_digits",
+      "description": "Current turn normalized DTMF digits.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "misc_counter",
+      "description": "Generic per-flow counter.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "mock_mode",
+      "description": "Synthetic success eval toggle.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "last_pmt_amt",
+      "description": "Last payment amount recorded.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "amount",
+      "description": "Currently discussed transaction or refund amount.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "ban_type",
+      "description": "Billing account type.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "is_prepaid",
+      "description": "Prepaid account indicator.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "loyalty_limit",
+      "description": "Loyalty program adjustment ceiling in dollars.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "vr_task_count",
+      "description": "Virtual-repair iteration counter.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "ticket_state",
+      "description": "Virtual-repair ticket status (open, in-progress, closed).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "item_list",
+      "description": "Captured equipment list.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "intent_type",
+      "description": "Sub-intent classification.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "api_resp",
+      "description": "Last API response payload.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "sms_type",
+      "description": "SMS payload format (Public or Private).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "sms_content",
+      "description": "SMS body text.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "day_val",
+      "description": "Per-flow temporary day string.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "date_val",
+      "description": "Per-flow temporary date string.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "month_val",
+      "description": "Per-flow temporary month string.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "end_time",
+      "description": "Per-flow temporary end time string.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "flag_val",
+      "description": "Per-flow temporary flag string.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_pin_on_file",
+      "description": "Evaluation fixture override for expected account PIN.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_otp_on_file",
+      "description": "Evaluation fixture override for expected OTP code.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_card_on_file_status",
+      "description": "Evaluation fixture override for card on file status (declined, expired, active).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_account_suspended",
+      "description": "Evaluation fixture override for account suspension flag.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_suspension_reason",
+      "description": "Evaluation fixture override for account suspension reason.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_unapplied_payment",
+      "description": "Evaluation fixture override for unapplied ledger payment amount.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_tech_status",
+      "description": "Evaluation fixture override for technician status.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_outage_status",
+      "description": "Evaluation fixture override for regional outage status.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_mfa_enabled",
+      "description": "Evaluation fixture override for MFA enablement flag.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_sms_delivery",
+      "description": "Evaluation fixture override for SMS delivery status.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_duplicate_payment_amount",
+      "description": "Evaluation fixture override for duplicate payment amount on ledger.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_business_flag",
+      "description": "Evaluation fixture override for business account tier.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_after_hours",
+      "description": "Evaluation fixture override for after-hours operational flag.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "fx_is_prepaid",
+      "description": "Evaluation fixture override for prepaid line status.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "locked_accounts",
+      "description": "List of account IDs locked out by excessive failed authentication attempts.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "explicit_language_switch",
+      "description": "Caller requested language override (e.g. en-US, fr-CA, es-US).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "language_locked",
+      "description": "True when language has been locked after Turn 1 selection or confirmation.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "turn_index",
+      "description": "Call turn counter for conversational and language inertia tracking.",
       "schema": {
         "type": "INTEGER",
         "default": 0,
