@@ -36,7 +36,7 @@ jobs:
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.check_wif.outputs.enabled == 'true'
       - uses: astral-sh/setup-uv@v5
         if: steps.check_wif.outputs.enabled == 'true'

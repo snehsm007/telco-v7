@@ -38,7 +38,7 @@ jobs:
       WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER || vars.WIF_PROVIDER }}
       WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT || vars.WIF_SERVICE_ACCOUNT }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # make smoke-impact diffs against the commit of the last full run
       - uses: astral-sh/setup-uv@v5
