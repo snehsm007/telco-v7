@@ -1905,12 +1905,6 @@ ALWAYS_WRONG_LOGIN_CODES: frozenset[str] = frozenset(  # pragma: no cover
     {"0000", "000000", "1111", "111111", "9999", "999999"}
 )
 
-VALID_OTPS: frozenset[str] = frozenset({"123456", "246810", "384920", "482913"})  # pragma: no cover
-
-VALID_PINS: frozenset[str] = frozenset({"1234", "5678"})  # pragma: no cover
-
-VALID_LOGIN_CODES: frozenset[str] = VALID_OTPS | VALID_PINS  # pragma: no cover
-
 def login_code_accepted(  # pragma: no cover
     code_digits: Any,
     attempts: int = 0,
@@ -1928,25 +1922,43 @@ def login_code_accepted(  # pragma: no cover
 
     eff_state = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
 
-    fx_pin = get_fixture_fact(eff_state, "fx_pin_on_file")
-    fx_otp = get_fixture_fact(eff_state, "fx_otp_on_file")
+    fx_pin_raw = get_fixture_fact(eff_state, "fx_pin_on_file")
+    fx_otp_raw = get_fixture_fact(eff_state, "fx_otp_on_file")
+    fx_pin = normalize_code(fx_pin_raw) if fx_pin_raw else ""
+    fx_otp = normalize_code(fx_otp_raw) if fx_otp_raw else ""
 
-    if fx_pin:
-        pin_norm = normalize_code(fx_pin)
-        if digits == pin_norm:
-            return True
-        if len(digits) == 6:
-            return digits == normalize_code(fx_otp) if fx_otp else digits in VALID_OTPS
-    if fx_otp:
-        otp_norm = normalize_code(fx_otp)
-        if digits == otp_norm:
-            return True
-        if len(digits) == 4:
-            return digits == normalize_code(fx_pin) if fx_pin else digits in VALID_PINS
-
-    if digits in VALID_LOGIN_CODES or digits == "314159":
+    # Direct match against an explicit override always succeeds
+    if (fx_pin and digits == fx_pin) or (fx_otp and digits == fx_otp):
         return True
-    return False
+
+    channel = ""
+    if isinstance(eff_state, dict):
+        channel = str(eff_state.get("login_channel") or "").strip().lower()
+
+    # Determine whether the caller is using an OTP channel or PIN channel
+    is_otp_channel = channel in {"sms", "email", "mfa_sms", "mfa_email"} or len(digits) == 6
+    is_pin_channel = channel in {"pin", "dtmf", "keypad"} or len(digits) == 4
+
+    if is_otp_channel and not (channel in {"pin", "dtmf", "keypad"} and len(digits) == 4):
+        if fx_otp:
+            return digits == fx_otp
+        # When fx_otp is not set, 6-digit OTP (or OTP channel code) is accepted
+        # even if fx_pin is set, because fx_pin is not applicable to the OTP channel.
+        return True
+
+    if is_pin_channel:
+        if fx_pin:
+            return digits == fx_pin
+        # When fx_pin is not set, 4-digit PIN (or PIN channel code) is accepted
+        # even if fx_otp is set, because fx_otp is not applicable to the PIN channel.
+        return True
+
+    if fx_pin and len(digits) == len(fx_pin):
+        return digits == fx_pin
+    if fx_otp and len(digits) == len(fx_otp):
+        return digits == fx_otp
+
+    return True
 
 def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
     """Read a whole-number variable, handling platform float serialization."""

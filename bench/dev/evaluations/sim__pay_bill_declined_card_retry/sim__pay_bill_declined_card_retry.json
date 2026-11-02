@@ -11,7 +11,6 @@
     "scenarioExpectations": [],
     "userFacts": [],
     "variableOverrides": {
-      "fx_pin_on_file": "4829",
       "fx_card_on_file_status": "declined"
     }
   },

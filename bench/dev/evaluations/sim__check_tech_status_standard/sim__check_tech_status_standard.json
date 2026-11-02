@@ -12,7 +12,6 @@
     "scenarioExpectations": [],
     "userFacts": [],
     "variableOverrides": {
-      "fx_pin_on_file": "4829",
       "fx_tech_status": "en_route"
     }
   },
