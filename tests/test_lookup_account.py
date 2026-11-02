@@ -130,15 +130,26 @@ def test_lookup_account_by_name_with_caller_phone(monkeypatch) -> None:
 def test_lookup_account_by_name_with_email(monkeypatch) -> None:
     session = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session, raising=False)
-    # Unrecognized name returns NOT_FOUND (Defect 5)
+    # Valid full name + valid email from unidentified caller resolves cleanly (Cluster 4)
     reply = tool.lookup_account(full_name="Marcus Thorne", email="marcus@example.com")
-    assert reply["status"] == "error"
-    assert reply["error"] == "NOT_FOUND"
+    assert reply["status"] == "ok"
+    assert reply["data"]["first_name"] == "Marcus"
+    assert session.state["identified"] is True
+    assert session.state["contact_email"] == "marcus@example.com"
 
     # Known name with email succeeds
+    session_known = SimpleNamespace(state={})
+    monkeypatch.setattr(tool, "context", session_known, raising=False)
     reply_known = tool.lookup_account(full_name="Jordan", email="jordan@example.com")
     assert reply_known["status"] == "ok"
     assert reply_known["data"]["first_name"] == "Jordan"
+
+    # Negative/invalid email returns NOT_FOUND
+    session_err = SimpleNamespace(state={})
+    monkeypatch.setattr(tool, "context", session_err, raising=False)
+    reply_err = tool.lookup_account(full_name="Marcus Thorne", email="wrong@example.com")
+    assert reply_err["status"] == "error"
+    assert reply_err["error"] == "NOT_FOUND"
 
 
 def test_lookup_account_nine_digit_ban_has_no_invented_phone(monkeypatch) -> None:
@@ -156,16 +167,27 @@ def test_lookup_account_nine_digit_ban_has_no_invented_phone(monkeypatch) -> Non
 def test_lookup_account_by_full_name_and_postal_code(monkeypatch) -> None:
     session = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session, raising=False)
-    # Unrecognized name returns NOT_FOUND (Defect 5)
+    # Valid full name + valid postal code from unidentified caller resolves cleanly (Cluster 4)
     reply = tool.lookup_account(full_name="Marcus Thorne", postal_code="H3Z 2Y7")
-    assert reply["status"] == "error"
-    assert reply["error"] == "NOT_FOUND"
+    assert reply["status"] == "ok"
+    assert reply["data"]["first_name"] == "Marcus"
+    assert session.state["identified"] is True
+    assert session.state["postal_code"] == "H3Z 2Y7"
 
     # Known name with postal code succeeds and surfaces regional alert
+    session_known = SimpleNamespace(state={})
+    monkeypatch.setattr(tool, "context", session_known, raising=False)
     reply_known = tool.lookup_account(full_name="Jordan", postal_code="H3Z 2Y7")
     assert reply_known["status"] == "ok"
-    assert session.state["postal_code"] == "H3Z 2Y7"
+    assert session_known.state["postal_code"] == "H3Z 2Y7"
     assert reply_known["data"]["regional_alert"] != ""
+
+    # Negative/invalid postal code returns NOT_FOUND
+    session_err = SimpleNamespace(state={})
+    monkeypatch.setattr(tool, "context", session_err, raising=False)
+    reply_err = tool.lookup_account(full_name="Marcus Thorne", postal_code="wrong")
+    assert reply_err["status"] == "error"
+    assert reply_err["error"] == "NOT_FOUND"
 
 
 def test_lookup_account_digits_only_behaves_as_before(monkeypatch) -> None:

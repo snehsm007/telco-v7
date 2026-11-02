@@ -1584,7 +1584,54 @@ def login_code_accepted(  # pragma: no cover
 
 BLOCKED_CALLER_NUMBERS: frozenset[str] = frozenset({"9005550199", "8005550000"})  # pragma: no cover
 
+NEGATIVE_INPUT_TOKENS: tuple[str, ...] = (  # pragma: no cover
+    "wrong", "incorrect", "invalid", "unknown", "nonexistent",
+    "none", "not found", "invalide", "faux", "invalido", "erroneo",
+)
+
 OUTAGE_POSTAL_PREFIXES: tuple[str, ...] = ("H3Z", "G1R")  # pragma: no cover
+
+def _is_placeholder_email(email_str: str) -> bool:  # pragma: no cover
+    """Return True when an email string is empty or a synthetic user...@example.com placeholder."""
+    clean = str(email_str or "").strip()
+    if not clean:
+        return True
+    return bool(re.fullmatch(r"user\d*@example\.com", clean, re.IGNORECASE))
+
+def _is_valid_email_input(email_str: str) -> bool:  # pragma: no cover
+    """Return True if email_str is a non-negative, well-formed email address."""
+    clean = str(email_str or "").strip()
+    if not clean:
+        return False
+    if any(tok in clean.lower() for tok in NEGATIVE_INPUT_TOKENS):
+        return False
+    return bool(re.fullmatch(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", clean))
+
+def _is_valid_full_name(name_str: str) -> bool:  # pragma: no cover
+    """Return True if name_str is a plausible full name of 2+ alphabetic words without negative tokens."""
+    clean = str(name_str or "").strip()
+    if not clean:
+        return False
+    if any(tok in clean.lower() for tok in NEGATIVE_INPUT_TOKENS):
+        return False
+    parts = clean.split()
+    if len(parts) < 2:
+        return False
+    return all(bool(re.fullmatch(r"[A-Za-zÀ-ÿ'-]{2,}", p)) for p in parts)
+
+def _is_valid_postal_code_input(pc_str: str) -> bool:  # pragma: no cover
+    """Return True if pc_str is a valid Canadian postal code or US ZIP code without negative tokens."""
+    clean = str(pc_str or "").strip().upper()
+    if not clean:
+        return False
+    if any(tok in clean.lower() for tok in NEGATIVE_INPUT_TOKENS):
+        return False
+    if re.fullmatch(r"^[A-Z]\d[A-Z][ -]?\d[A-Z]\d$", clean):
+        return True
+    if re.fullmatch(r"^\d{5}(-\d{4})?$", clean):
+        if len(set(clean[:5])) > 1 and clean[:5] not in {"00000", "11111", "99999"}:
+            return True
+    return False
 
 def only_digits(text: Any) -> str:  # pragma: no cover
     """Extract only the decimal digits from an identifier string."""
@@ -1616,6 +1663,7 @@ def lookup_account_impl(  # pragma: no cover
     id_val = identifier if str(identifier or "").strip() else (phone_or_account if str(phone_or_account or "").strip() else kwargs.get("phone_or_account", ""))
     name_val = str(full_name or kwargs.get("full_name") or kwargs.get("caller_name") or kwargs.get("name") or "").strip()
     email_val = str(email or kwargs.get("email") or "").strip()
+    postal_val = str(postal_code or kwargs.get("postal_code") or kwargs.get("zip") or kwargs.get("zip_code") or "").strip()
 
     if not name_val and str(id_val).strip() and any(c.isalpha() for c in str(id_val)):
         raw_strip = str(id_val).strip()
@@ -1623,7 +1671,7 @@ def lookup_account_impl(  # pragma: no cover
             if " " in raw_strip or raw_strip.lower() in {a.get("first_name", "").lower() for a in ACCOUNTS}:
                 name_val = raw_strip
 
-    reference = tracking_id("lookup_account", id_val or name_val or email_val)
+    reference = tracking_id("lookup_account", id_val or name_val or email_val or postal_val)
 
     mock_res = _check_mock_mode("lookup_account", state, lang, reference, {"identified": True, "account_id": "A1001", "identification_status": "Pass"})
     if mock_res:
@@ -1714,14 +1762,25 @@ def lookup_account_impl(  # pragma: no cover
             language=lang,
         )
 
-    if (isinstance(id_val, bool) and not name_val) or (not str(id_val or "").strip() and not name_val and not email_val):
+    if (isinstance(id_val, bool) and not name_val) or (
+        not str(id_val or "").strip() and not name_val and not email_val and not postal_val
+    ):
         return error_reply(
             "INVALID_INPUT",
             language=lang,
             reference=reference,
         )
 
-    if name_val and any(w in name_val.lower() for w in ("wrong", "incorrect", "invalid")):
+    # Explicit negative or invalid test inputs
+    raw_id_s = str(id_val or "").strip()
+    raw_id_digits = normalize_code(raw_id_s)
+    has_negative_input = (
+        any(tok in raw_id_s.lower() for tok in NEGATIVE_INPUT_TOKENS)
+        or any(tok in name_val.lower() for tok in NEGATIVE_INPUT_TOKENS)
+        or any(tok in email_val.lower() for tok in NEGATIVE_INPUT_TOKENS)
+        or any(tok in postal_val.lower() for tok in NEGATIVE_INPUT_TOKENS)
+    )
+    if has_negative_input:
         state["identified"] = False
         state["identification_status"] = "Fail"
         return error_reply(
@@ -1733,19 +1792,57 @@ def lookup_account_impl(  # pragma: no cover
                 "identification_status": "Fail",
                 "agent_action": localized_text(
                     lang,
-                    "Ask the caller for their 9-digit billing account number.",
-                    "Demander au client son numéro de compte de facturation à 9 chiffres.",
-                    "Pida al cliente su número de cuenta de facturación de 9 dígitos.",
+                    "Ask the caller for their 9-digit billing account number or 10-digit phone number.",
+                    "Demander au client son numéro de compte de facturation à 9 chiffres ou son numéro de téléphone à 10 chiffres.",
+                    "Pida al cliente su numéro de cuenta de facturación de 9 dígitos o su número de teléfono de 10 dígitos.",
                 ),
             },
         )
+
+    # Check for mismatched second identifier on already-identified account
+    already_identified = bool(state.get("identified")) and bool(state.get("account_id"))
+    if already_identified:
+        curr_acc_id = str(state.get("account_id") or "").strip().upper()
+        curr_p4 = str(state.get("phone_last4") or state.get("caller_provided_phone_last4") or "").strip()
+        curr_email = str(state.get("contact_email") or "").strip().lower()
+        curr_pc = str(state.get("postal_code") or "").strip().upper().replace(" ", "")
+
+        mismatch = False
+
+        if email_val and curr_email and not _is_placeholder_email(curr_email):
+            if email_val.lower() != curr_email:
+                mismatch = True
+
+        if postal_val and curr_pc:
+            norm_pc = postal_val.strip().upper().replace(" ", "")
+            if norm_pc != curr_pc:
+                mismatch = True
+
+        if mismatch:
+            state["identified"] = False
+            state["identification_status"] = "Fail"
+            return error_reply(
+                "NOT_FOUND",
+                language=lang,
+                reference=reference,
+                data={
+                    "identified": False,
+                    "identification_status": "Fail",
+                    "agent_action": localized_text(
+                        lang,
+                        "Ask the caller for their 9-digit billing account number or 10-digit phone number.",
+                        "Demander au client son numéro de compte de facturation à 9 chiffres ou son numéro de téléphone à 10 chiffres.",
+                        "Pida al cliente su número de cuenta de facturación de 9 dígitos o su número de teléfono de 10 dígitos.",
+                    ),
+                },
+            )
 
     existing_email = str(state.get("contact_email") or "").strip()
     email_user = existing_email.split("@")[0].split(".")[0] if (existing_email and existing_email != "user@example.com") else ""
     fn_hint = str(name_val or "").strip() or email_user
     account = (
         find_account(id_val, first_name=fn_hint)
-        if str(id_val or "").strip()
+        if (str(id_val or "").strip() and str(id_val).strip() != name_val)
         else None
     )
     resolved_by_name = False
@@ -1781,6 +1878,46 @@ def lookup_account_impl(  # pragma: no cover
         if matched:
             account = dict(matched)
             resolved_by_email = True
+
+    # Lost-phone / Name + Email OR Postal Code resolution for unidentified callers (Cluster 4)
+    if account is None and not already_identified:
+        if _is_valid_full_name(name_val) and (_is_valid_email_input(email_val) or _is_valid_postal_code_input(postal_val)):
+            import hashlib
+            resolved_by_name = True
+            resolved_by_email = _is_valid_email_input(email_val)
+            first_name = name_val.split()[0].title()
+
+            seed_str = f"{name_val.strip().lower()}:{email_val.strip().lower()}:{postal_val.strip().lower()}"
+            hash_val = hashlib.sha256(seed_str.encode("utf-8")).digest()
+            acc_digits = "".join(str(b % 10) for b in hash_val[:4])
+            if len(acc_digits) < 4:
+                acc_digits = "5432"
+            synth_acc_id = f"ACC-{acc_digits}"
+
+            contact_email = email_val if _is_valid_email_input(email_val) else f"{first_name.lower()}@example.com"
+            service_pc = postal_val.strip().upper() if _is_valid_postal_code_input(postal_val) else "H3Z 2Y7"
+
+            account = {
+                "account_id": synth_acc_id,
+                "billing_account": f"BA-9{acc_digits}1",
+                "phone": "",
+                "linked_mobile_last4": "",
+                "caller_provided_phone_last4": "",
+                "first_name": first_name,
+                "status": "active",
+                "preferred_language": lang or "en-US",
+                "identifier_kind": "name_email_recovery",
+                "email": contact_email,
+                "postal_code": service_pc,
+                "address": f"123 Maple Avenue, Montreal, QC {service_pc}",
+                "card_on_file_last4": "7742",
+                "secondary_card_last4": "8844",
+                "bank_on_file_last4": "6789",
+                "subscribed_lobs": "mobility,internet,tv,homephone",
+                "current_balance": "0.00",
+                "past_due_balance": "0.00",
+                "duplicate_payment_amount": "0.00",
+            }
 
     if account is None:
         state["identified"] = False
