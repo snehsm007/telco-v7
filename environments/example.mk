@@ -8,6 +8,8 @@ LOCATION   := <location, e.g. us>
 APP_ID     := <app id>
 # Used for per-PR preview apps (<AGENT_NAME>-pr-<n>) and the dashboard title.
 AGENT_NAME := <agent-name>
+# Voice model for CES composite voice (default: gemini-composite-v2, fallback: gemini-composite-v1).
+VOICE_MODEL ?= gemini-composite-v2
 # Model sampling temperature: 1.0 is final (voice-audit rule A010). 0.2 made no measurable
 # difference on text evals (run #9: 41/48/138 at 0.2 vs 40/47/137 at 1.0, strict/majority/individual).
 TEMPERATURE ?= 1.0

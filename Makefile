@@ -24,7 +24,7 @@
         preflight auth-check impact smoke-impact eval-contract setup-dlp skill-assets skill-assets-check \
         push push-evals pull preview-up preview-down eval gate gate3 smoke chat inspect versions-compare \
         bench bench-dry bench-smoke bench-unstable bench-full bench-record bench-compare bench-fetch \
-        trace-triage trace-replay dashboard publish-dashboard need-app need-cxas need-deps
+        trace-triage trace-replay dashboard publish-dashboard submit-academy need-app need-cxas need-deps
 
 ENV ?= staging
 -include environments/$(ENV).mk
@@ -61,11 +61,12 @@ VOICE_AUDIT  ?= $(if $(wildcard $(LOCAL_VOICE_AUDIT)),$(LOCAL_VOICE_AUDIT),$(HOM
 # --- kickstart -----------------------------------------------------------------------
 TARGET_DIR  ?= .
 NAME        ?=
-AGENT_NAME  ?= $(if $(NAME),$(NAME),starter-voice-agent)
+AGENT_NAME  ?= $(if $(NAME),$(NAME),snehsm-FDEBootcamp-CHI-greenfield)
 PRD         ?=
-PROJECT_ID  ?= my-gcp-project
+PROJECT_ID  ?= fde-bootcamp
 LOCATION    ?= us
 LANGUAGES   ?= en-US,fr-CA,es-US
+VOICE_MODEL ?= gemini-composite-v2
 TEMPERATURE ?= 1.0
 
 # --- cloud target --------------------------------------------------------------------
@@ -246,14 +247,24 @@ smoke-impact: need-app preflight ## Gate 1 on the pushed commit: impacted evals 
 
 push: need-app need-cxas bundle-check preflight ## Push $(APP_DIR) to ENV's app as version git-<sha7> (commit cxas_app/, lib/, evals/ first) and record it in history/last_push.json
 	@$(IMPACT) --require-clean
+	@if [ -n "$(VOICE_MODEL)" ]; then \
+	  curr_model=$$($(PYTHON) -c 'import json, pathlib; print(json.loads(pathlib.Path("$(APP_DIR)/app.json").read_text()).get("modelSettings", {}).get("model", ""))'); \
+	  if [ "$$curr_model" != "$(VOICE_MODEL)" ]; then \
+	    echo "Applying VOICE_MODEL=$(VOICE_MODEL) for push..."; \
+	    $(PYTHON) -c 'import json, pathlib; p = pathlib.Path("$(APP_DIR)/app.json"); d = json.loads(p.read_text()); d.setdefault("modelSettings", {})["model"] = "$(VOICE_MODEL)"; p.write_text(json.dumps(d, indent=2) + "\n")'; \
+	  fi; \
+	fi
 	$(PYTHON) suite/cloud_log.py exec --op WRITE --target "$(APP)" --notes "push commit $(SHA7)" -- \
 		$(CXAS) push --app-dir $(APP_DIR) --to $(APP) --create-version --version-name git-$(SHA7)
 	@$(IMPACT) --record-push --app "$(APP)" --version-name git-$(SHA7)
 	@echo "Re-apply any app-level settings an overwriting push resets (see references/13-commands.md)."
 	@echo "Next: make smoke-impact ENV=$(ENV)"
 
-push-evals: need-app preflight ## Create/update the local goldens, simulations and probes in ENV's app (TARGETS= to limit)
+push-evals: need-app preflight ## Create/update the local goldens, simulations and probes in ENV's app (TARGETS= to limit) and sync dev bench evals
 	$(PYTHON) scripts/run_evals.py --push --app $(APP) --eval-dir $(EVALS_DIR) $(if $(TARGETS),--targets "$(TARGETS)")
+	@if [ -d "$(BENCH_DIR)/dev" ]; then \
+	  $(RUN_BENCH) --app $(APP) --bench-dir $(BENCH_DIR) $(if $(TARGETS),--evals "$(TARGETS)") $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,); \
+	fi
 
 setup-dlp: need-app preflight ## Cloud DLP: create/update <AGENT_NAME>-pii-inspect/-deidentify in LOCATION and turn on log redaction in app.json (then commit + make push; DRY_RUN=1 previews)
 	$(PYTHON) scripts/setup_dlp.py --project-id "$(PROJECT_ID)" --location "$(LOCATION)" --agent-name "$(AGENT_NAME)" \
@@ -362,3 +373,12 @@ dashboard: ## Render the static HTML hill-climb dashboard into dashboard/ (title
 publish-dashboard: dashboard ## Publish dashboard/ to Zipline: ZIPLINE_PROJECT= ZIPLINE_ASSET=
 	@test -n "$(ZIPLINE_PROJECT)" && test -n "$(ZIPLINE_ASSET)" || (echo "ERROR: set ZIPLINE_PROJECT and ZIPLINE_ASSET" >&2; exit 1)
 	$(PYTHON) scripts/publish_zipline.py --project "$(ZIPLINE_PROJECT)" --asset "$(ZIPLINE_ASSET)" --dir dashboard
+
+# --- CXAS Agent Academy (fde-bootcamp-chi) -----------------------------------------------------
+submit-academy: ## Submit evaluation results to CXAS Agent Academy (DRY_RUN=1 for dry-run preview)
+	$(PYTHON) scripts/submit_academy.py \
+		$(if $(filter 1 true yes,$(DRY_RUN) $(dry_run)),--dry-run,) \
+		$(if $(APP_ID),--app "$(APP_ID)",) \
+		$(if $(or $(EVALS_PASSED),$(evals_passed)),--evals-passed $(or $(EVALS_PASSED),$(evals_passed)),) \
+		$(if $(or $(EVALS_TOTAL),$(evals_total)),--evals-total $(or $(EVALS_TOTAL),$(evals_total)),)
+
