@@ -45,6 +45,8 @@ from lib.fakes import (
     only_digits,
     read_count,
     secret_pin_accepted,
+    fixture_state_scope,
+    get_fixture_fact,
 )
 from lib.replies import (
     ERROR_CODES,
@@ -86,29 +88,18 @@ MAX_PAYMENT_ATTEMPTS = 3
 LOGIN_CODE_LENGTH = 6
 SECRET_PIN_LENGTH = 4
 
-_DEFAULT_STATE: dict[str, Any] = {}
-
 
 def _get_state(
     state: dict[str, Any] | None = None,
     session_state: dict[str, Any] | None = None,
     reset_if_locked: bool = False,
 ) -> dict[str, Any]:
-    """Return the caller's session state dict, falling back to module default state when omitted."""
+    """Return the caller's session state dict, returning a fresh dict when omitted."""
     if state is not None:
         return state
     if session_state is not None:
         return session_state
-    if reset_if_locked and (
-        _DEFAULT_STATE.get("auth_status") == "locked"
-        or max(
-            read_count(_DEFAULT_STATE, "auth_failure_count"),
-            read_count(_DEFAULT_STATE, "login_attempts"),
-        )
-        >= MAX_LOGIN_ATTEMPTS
-    ):
-        _DEFAULT_STATE.clear()
-    return _DEFAULT_STATE
+    return {}
 
 
 def _ensure_default_profile(state: dict[str, Any]) -> None:
@@ -119,14 +110,37 @@ def _ensure_default_profile(state: dict[str, Any]) -> None:
     state.setdefault("payment_failure_count", 0)
 
 
-def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:
-    """Resolve session language with asymmetric lock: non-English locks over English.
+def _is_account_locked(state: dict[str, Any], account_id: str | None) -> bool:
+    """Return True if account_id is present in state['locked_accounts']."""
+    if not account_id:
+        return False
+    raw = state.get("locked_accounts") or ""
+    if isinstance(raw, str):
+        locked_set = {x.strip() for x in raw.split(",") if x.strip()}
+    elif isinstance(raw, (list, set, tuple)):
+        locked_set = {str(x).strip() for x in raw if str(x).strip()}
+    else:
+        locked_set = set()
+    return str(account_id).strip() in locked_set
 
-    When state has no language or is default 'en-US', a model-supplied
-    non-English locale (fr-CA/es-US/...) is accepted and becomes the lock.
-    Once state holds a non-English locale, a model-supplied 'en-US' or empty
-    value is ignored (PRD BR-TV-004 lock).
-    """
+
+def _record_account_lockout(state: dict[str, Any], account_id: str | None) -> None:
+    """Record account_id in state['locked_accounts'] as a canonical comma-separated string."""
+    if not account_id:
+        return
+    raw = state.get("locked_accounts") or ""
+    if isinstance(raw, str):
+        locked_set = {x.strip() for x in raw.split(",") if x.strip()}
+    elif isinstance(raw, (list, set, tuple)):
+        locked_set = {str(x).strip() for x in raw if str(x).strip()}
+    else:
+        locked_set = set()
+    locked_set.add(str(account_id).strip())
+    state["locked_accounts"] = ",".join(sorted(locked_set))
+
+
+def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:
+    """Resolve session language with asymmetric lock and explicit bidirectional switch."""
     has_state_dict = callable(getattr(state, "get", None))
     current = ""
     if has_state_dict:
@@ -138,8 +152,40 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:
     if language and str(language).strip():
         arg_lang = resolve_copy_locale(str(language))
 
-    # 1. Once state holds a non-English locale, model-supplied en-US/empty is ignored.
+    # Check for explicit language switch requests (BR-TV-004, BR-TV-020)
+    explicit_target = ""
+    if has_state_dict:
+        explicit_switch = str(state.get("explicit_language_switch") or "").strip()
+        if explicit_switch:
+            explicit_target = resolve_copy_locale(explicit_switch)
+        else:
+            combined_utt = " ".join([
+                str(state.get("utterance") or ""),
+                str(state.get("last_user_utterance") or ""),
+            ]).lower()
+            en_phrases = ("switch to english", "in english", "speak english", "en anglais", "anglais", "english please")
+            fr_phrases = ("switch to french", "in french", "speak french", "en français", "en francais", "french please")
+            es_phrases = ("switch to spanish", "in spanish", "speak spanish", "en español", "en espanol", "spanish please")
+            if any(p in combined_utt for p in en_phrases):
+                explicit_target = "en-US"
+            elif any(p in combined_utt for p in fr_phrases):
+                explicit_target = "fr-CA"
+            elif any(p in combined_utt for p in es_phrases):
+                explicit_target = "es-US"
+
+    if explicit_target:
+        if has_state_dict:
+            state["language"] = explicit_target
+            state["preferred_language"] = explicit_target
+            state["explicit_language_switch"] = explicit_target
+        return explicit_target
+
+    # 1. Once state holds a non-English locale, model-supplied en-US/empty without explicit switch is ignored.
     if current and current != "en-US":
+        if arg_lang and arg_lang != "en-US" and arg_lang != current:
+            state["language"] = arg_lang
+            state["preferred_language"] = arg_lang
+            return arg_lang
         state["language"] = current
         if not state.get("preferred_language"):
             state["preferred_language"] = current
@@ -189,9 +235,10 @@ def _hydrate_default_account_if_needed(state: dict[str, Any]) -> None:
     state.setdefault("contact_email", default_acc.get("email", "jordan@example.com"))
     state.setdefault("service_address", default_acc.get("address", "123 Maple Avenue, Montreal, QC"))
     state.setdefault("card_last4", default_acc.get("card_on_file_last4", "7742"))
-    state.setdefault("bank_last4", default_acc.get("bank_on_file_last4", "6789"))
-    state.setdefault("current_balance", default_acc.get("current_balance", "85.50"))
-    state.setdefault("past_due_balance", default_acc.get("past_due_balance", "85.50"))
+    def_bal = str(default_acc.get("current_balance", "0.00"))
+    state.setdefault("current_balance", def_bal)
+    def_past = str(default_acc.get("past_due_balance", "0.00"))
+    state.setdefault("past_due_balance", def_past)
 
 
 def _is_truthy_bool(val: Any) -> bool:
@@ -268,7 +315,7 @@ def _record_audit(state: dict[str, Any]) -> None:
 
 def _check_mock_error(state: dict[str, Any], lang: str) -> dict[str, Any] | None:
     """Return synthetic system outage error if mock_error is injected."""
-    val = str(state.get("mock_error") or "").strip().upper()
+    val = str(get_fixture_fact(state, "mock_error", "") or state.get("mock_error") or "").strip().upper()
     if val in {"SYSTEM_DOWN", "SERVICE_UNAVAILABLE", "BACKEND_FAILURE"}:
         return error_reply(
             "SERVICE_UNAVAILABLE",
@@ -280,6 +327,28 @@ def _check_mock_error(state: dict[str, Any], lang: str) -> dict[str, Any] | None
                 "handoff_message": spoken_line("live_agent_handoff", lang),
             },
         )
+    return None
+
+
+def _check_mock_mode(
+    tool_name: str,
+    state: dict[str, Any],
+    lang: str,
+    reference: str,
+    extra_data: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Return synthetic success branch if mock_mode is set (PRD Section 17)."""
+    val = str(get_fixture_fact(state, "mock_mode", "") or state.get("mock_mode") or "").strip().lower()
+    if val == "true":
+        data: dict[str, Any] = {
+            "status": "ok",
+            "mock_mode": True,
+            "synthetic_success": True,
+            "tool": tool_name,
+        }
+        if extra_data:
+            data.update(extra_data)
+        return ok_reply(data, reference, language=lang)
     return None
 
 
@@ -693,9 +762,51 @@ def lookup_account_impl(
 
     reference = tracking_id("lookup_account", id_val or name_val or email_val)
 
-    # Business account deflection (BR-TV-012, T-09)
+    mock_res = _check_mock_mode("lookup_account", state, lang, reference, {"identified": True, "account_id": "A1001", "identification_status": "Pass"})
+    if mock_res:
+        return mock_res
+
+    # Priority 2: Fraud claim preempts business-account handoff (PRD Section 20)
+    combined_utt = " ".join([
+        str(id_val or ""),
+        str(name_val or ""),
+        str(email_val or ""),
+        str(state.get("utterance") or ""),
+        str(state.get("last_user_utterance") or ""),
+    ]).lower()
+    fraud_kw = (
+        "fraud", "fraude", "hacked", "hacké", "piraté", "pirate", "stolen", "volé",
+        "unauthorized", "non autorisé", "compromised", "compromis", "sim swap", "sim-swap",
+        "usurpation", "identity theft", "usurpation d'identité"
+    )
+    is_fraud = any(w in combined_utt for w in fraud_kw) or str(state.get("intent_type", "")).lower() == "fraud"
+    if is_fraud:
+        state["handoff_reason"] = "fraud_escalation"
+        empathy = spoken_line("empathy_protocol", lang)
+        fraud_msg = spoken_line("fraud_escalation", lang)
+        full_msg = f"{empathy} {fraud_msg}".strip() if empathy else fraud_msg
+        state["handoff_message"] = full_msg
+        state["last_tracking_id"] = reference
+        return ok_reply(
+            {
+                "must_escalate_immediately": True,
+                "escalation_reason": "fraud_escalation",
+                "target_queue": "fraud_and_security_24x7",
+                "handoff_message": full_msg,
+                "spoken_message": full_msg,
+                "verbatim_key": "fraud_escalation",
+                "empathy_protocol": empathy,
+                "queue_hours_status": "open_24x7",
+            },
+            reference,
+            language=lang,
+        )
+
+    # Business account deflection (BR-TV-012, T-09, Priority 5)
+    fx_biz = get_fixture_fact(state, "fx_business_flag")
     is_biz = (
-        bool(is_business_inquiry)
+        (str(fx_biz).lower() == "true")
+        or bool(is_business_inquiry)
         or str(is_business_inquiry).lower() in {"true", "1", "business", "commercial"}
         or any(w in str(id_val).lower() for w in ("business", "entreprise", "commercial", "affaires"))
         or any(w in str(name_val).lower() for w in ("business", "entreprise", "commercial", "affaires"))
@@ -713,6 +824,7 @@ def lookup_account_impl(
                 "customer_type": "business",
                 "must_escalate_immediately": True,
                 "escalation_reason": "business_handoff",
+                "target_queue": "business_solutions",
                 "handoff_message": biz_line,
                 "spoken_message": biz_line,
             },
@@ -747,11 +859,15 @@ def lookup_account_impl(
         )
 
     if name_val and any(w in name_val.lower() for w in ("wrong", "incorrect", "invalid")):
+        state["identified"] = False
+        state["identification_status"] = "Fail"
         return error_reply(
             "NOT_FOUND",
             language=lang,
             reference=reference,
             data={
+                "identified": False,
+                "identification_status": "Fail",
                 "agent_action": localized_text(
                     lang,
                     "Ask the caller for their 9-digit billing account number.",
@@ -790,12 +906,7 @@ def lookup_account_impl(
                 break
         if matched:
             account = dict(matched)
-        else:
-            account = dict(find_account(ACCOUNTS[0]["account_id"]))
-            first_word = name_val.split()[0].title()
-            account["first_name"] = first_word
-            account["email"] = f"{first_word.lower()}@example.com"
-        resolved_by_name = True
+            resolved_by_name = True
 
     if account is None and email_val:
         matched = None
@@ -806,22 +917,23 @@ def lookup_account_impl(
                 break
         if matched:
             account = dict(matched)
-        else:
-            account = dict(find_account(ACCOUNTS[0]["account_id"]))
-            account["email"] = email_val
-        resolved_by_email = True
+            resolved_by_email = True
 
     if account is None:
+        state["identified"] = False
+        state["identification_status"] = "Fail"
         return error_reply(
             "NOT_FOUND",
             language=lang,
             reference=reference,
             data={
+                "identified": False,
+                "identification_status": "Fail",
                 "agent_action": localized_text(
                     lang,
-                    "Ask the caller for their 9-digit billing account number.",
-                    "Demander au client son numéro de compte de facturation à 9 chiffres.",
-                    "Pida al cliente su número de cuenta de facturación de 9 dígitos.",
+                    "Ask the caller for their 9-digit billing account number or 10-digit phone number.",
+                    "Demander au client son numéro de compte de facturation à 9 chiffres ou son numéro de téléphone à 10 chiffres.",
+                    "Pida al cliente su número de cuenta de facturación de 9 dígitos o su número de teléfono de 10 dígitos.",
                 ),
             },
         )
@@ -839,13 +951,24 @@ def lookup_account_impl(
         state["mfa_email_code_sent"] = False
         state["mfa_email_verified"] = False
         state["lost_authenticator"] = False
-        state["auth_failure_count"] = 0
-        state["login_attempts"] = 0
-        state["pin_failure_count"] = 0
-        state["pin_attempts"] = 0
+        new_acc_id = account["account_id"]
+        if _is_account_locked(state, new_acc_id):
+            state["auth_failure_count"] = MAX_LOGIN_ATTEMPTS
+            state["login_attempts"] = MAX_LOGIN_ATTEMPTS
+            state["pin_failure_count"] = MAX_LOGIN_ATTEMPTS
+            state["pin_attempts"] = MAX_LOGIN_ATTEMPTS
+            state["auth_status"] = "locked"
+        else:
+            state["auth_failure_count"] = 0
+            state["login_attempts"] = 0
+            state["pin_failure_count"] = 0
+            state["pin_attempts"] = 0
 
     state["account_id"] = account["account_id"]
+    state["billing_account"] = account["account_id"]
+    state["user_id"] = account["account_id"]
     state["identified"] = True
+    state["identification_status"] = "Pass"
     state["lookup_by_name"] = bool(resolved_by_name)
     state["customer_type"] = "residential"
     state["business_flag"] = False
@@ -890,8 +1013,8 @@ def lookup_account_impl(
     state["card_last4"] = card_on_file if card_on_file else (state.get("card_last4") or "7742")
     bank_on_file = account.get("bank_on_file_last4", "")
     state["bank_last4"] = bank_on_file if bank_on_file else (state.get("bank_last4") or "6789")
-    state["current_balance"] = account.get("current_balance", "85.50")
-    state["past_due_balance"] = account.get("past_due_balance", "85.50")
+    state["current_balance"] = str(account.get("current_balance") or "0.00")
+    state["past_due_balance"] = str(account.get("past_due_balance") or "0.00")
     state["is_suspended"] = account.get("is_suspended", False)
     state["suspension_reason"] = account.get("suspension_reason", "")
 
@@ -1248,10 +1371,20 @@ def verify_login_impl(
                 data={"agent_action": action_text},
             )
 
-    code_val = code or kwargs.get("pin", "")
+    code_val = code or kwargs.get("pin", "") or state.get("dtmf_digits", "")
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("verify_login", account_id, str(code_val))
     state["last_tracking_id"] = reference
+
+    mock_res = _check_mock_mode("verify_login", state, lang, reference, {
+        "verified": True,
+        "logged_in": True,
+        "auth_status": "pass",
+    })
+    if mock_res:
+        state["auth_status"] = "pass"
+        state["logged_in"] = True
+        return mock_res
 
     is_step_up = (
         (bool(state.get("mfa_email_code_sent")) and not bool(state.get("mfa_email_verified")))
@@ -1275,7 +1408,7 @@ def verify_login_impl(
             "verified": True,
             "logged_in": True,
             "auth_status": "pass",
-            "current_balance": state.get("current_balance", "85.50"),
+            "current_balance": str(state.get("current_balance") or "0.00"),
             "is_suspended": state.get("is_suspended", False),
         }
         if bool(state.get("browsed_plan_category")):
@@ -1292,9 +1425,11 @@ def verify_login_impl(
         read_count(state, "pin_failure_count"),
         read_count(state, "pin_attempts"),
     )
-    if state.get("auth_status") == "locked" or failures >= MAX_LOGIN_ATTEMPTS:
+    if _is_account_locked(state, account_id) or state.get("auth_status") == "locked" or failures >= MAX_LOGIN_ATTEMPTS:
         state["auth_status"] = "locked"
         state["logged_in"] = False
+        state["auth_failure_count"] = MAX_LOGIN_ATTEMPTS
+        _record_account_lockout(state, account_id)
         return error_reply(
             "TOO_MANY_ATTEMPTS",
             reference=reference,
@@ -1355,43 +1490,45 @@ def verify_login_impl(
             },
         )
 
-    if not login_code_accepted(digits, attempts=failures, max_attempts=MAX_LOGIN_ATTEMPTS):
-        failures += 1
-        state["auth_failure_count"] = failures
-        state["login_attempts"] = failures
-        state["pin_failure_count"] = failures
-        state["pin_attempts"] = failures
-        state["logged_in"] = False
-        if failures >= MAX_LOGIN_ATTEMPTS:
-            state["auth_status"] = "locked"
+    with fixture_state_scope(state):
+        if not login_code_accepted(digits, attempts=failures, max_attempts=MAX_LOGIN_ATTEMPTS):
+            failures += 1
+            state["auth_failure_count"] = failures
+            state["login_attempts"] = failures
+            state["pin_failure_count"] = failures
+            state["pin_attempts"] = failures
+            state["logged_in"] = False
+            if failures >= MAX_LOGIN_ATTEMPTS:
+                state["auth_status"] = "locked"
+                _record_account_lockout(state, account_id)
+                return error_reply(
+                    "TOO_MANY_ATTEMPTS",
+                    reference=reference,
+                    language=lang,
+                    data={
+                        "attempts": failures,
+                        "attempts_left": 0,
+                        "attempts_remaining": 0,
+                        "logged_in": False,
+                        "auth_status": "locked",
+                        "lockout_triggered": True,
+                        "must_escalate_immediately": True,
+                        "escalation_reason": "auth_failure_handoff",
+                        "handoff_message": spoken_line("live_agent_handoff", lang),
+                    },
+                )
+            remaining = int(MAX_LOGIN_ATTEMPTS - failures)
             return error_reply(
-                "TOO_MANY_ATTEMPTS",
+                "WRONG_CODE",
                 reference=reference,
                 language=lang,
                 data={
                     "attempts": failures,
-                    "attempts_left": 0,
-                    "attempts_remaining": 0,
-                    "logged_in": False,
-                    "auth_status": "locked",
-                    "lockout_triggered": True,
-                    "must_escalate_immediately": True,
-                    "escalation_reason": "auth_failure_handoff",
-                    "handoff_message": spoken_line("live_agent_handoff", lang),
+                    "attempts_left": remaining,
+                    "attempts_remaining": remaining,
+                    "lockout_triggered": False,
                 },
             )
-        remaining = int(MAX_LOGIN_ATTEMPTS - failures)
-        return error_reply(
-            "WRONG_CODE",
-            reference=reference,
-            language=lang,
-            data={
-                "attempts": failures,
-                "attempts_left": remaining,
-                "attempts_remaining": remaining,
-                "lockout_triggered": False,
-            },
-        )
 
     state["auth_status"] = "pass"
     state["logged_in"] = True
@@ -1433,7 +1570,7 @@ def verify_login_impl(
         "verified": True,
         "logged_in": True,
         "auth_status": "pass",
-        "current_balance": state.get("current_balance", "85.50"),
+        "current_balance": str(state.get("current_balance") or "0.00"),
         "is_suspended": state.get("is_suspended", False),
     }
     if bool(state.get("browsed_plan_category")):
@@ -1496,8 +1633,19 @@ def handover_to_person_impl(
         or tq_low == "business_solutions"
     ):
         msg = spoken_line("business_handoff", resolved_lang)
+    fx_after = get_fixture_fact(state, "fx_after_hours")
+    is_after_hours = bool(state.get("after_hours")) or (str(fx_after).lower() == "true")
+
+    if (
+        "business" in r_low
+        or state.get("business_flag")
+        or "entreprise" in r_low
+        or "commercial" in r_low
+        or tq_low == "business_solutions"
+    ):
+        msg = spoken_line("business_handoff", resolved_lang)
         queue = "business_solutions"
-        queue_hours = "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
     elif (
         any(w in r_low for w in ("fraud", "unauthorized", "security", "fraude", "compromis"))
         or tq_low == "fraud_and_security_24x7"
@@ -1511,15 +1659,15 @@ def handover_to_person_impl(
     ):
         msg = spoken_line("transfer_to_specialist", resolved_lang)
         queue = "billing_specialist"
-        queue_hours = "after_hours_callback_available" if state.get("after_hours") else "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
     elif "secondary_language" in r_low or tq_low == "multilingual_support":
         msg = spoken_line("live_agent_handoff", resolved_lang)
         queue = "multilingual_support"
-        queue_hours = "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
     else:
         msg = spoken_line("live_agent_handoff", resolved_lang)
         queue = target_queue or "general_support"
-        queue_hours = "after_hours_callback_available" if state.get("after_hours") else "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
 
     state["language"] = resolved_lang
     state["handoff_reason"] = clean_reason
@@ -1527,6 +1675,28 @@ def handover_to_person_impl(
     state["handover_complete"] = True
     state["handoff_message"] = msg
     state["last_tracking_id"] = reference
+
+    session_ctx: dict[str, Any] = {
+        "account_id": str(state.get("account_id") or ""),
+        "identification_status": str(state.get("identification_status") or ("Pass" if state.get("identified") else "Fail")),
+        "auth_status": str(state.get("auth_status") or "none"),
+        "language": resolved_lang,
+        "active_intent": localized_text(
+            resolved_lang,
+            clean_reason or str(state.get("intent_type") or ""),
+            f"{clean_reason or str(state.get('intent_type') or '')} (fr)",
+            f"{clean_reason or str(state.get('intent_type') or '')} (es)",
+        ),
+        "module": queue.upper(),
+        "summary": localized_text(
+            resolved_lang,
+            summary or clean_reason,
+            f"{summary or clean_reason} (fr)",
+            f"{summary or clean_reason} (es)",
+        ),
+        "ticket_or_reference_id": str(state.get("dispute_ticket_id") or state.get("last_tracking_id") or reference),
+        "after_hours": bool(is_after_hours),
+    }
 
     reply_payload = {
         "handoff_status": "completed_via_specialist_queue",
@@ -1538,12 +1708,20 @@ def handover_to_person_impl(
         "language": resolved_lang,
         "handoff_message": msg,
         "spoken_message": msg,
+        "session_context": session_ctx,
         "action_fulfilled": True,
         "task_completed": True,
         "user_goal_fulfilled": True,
     }
+    if is_after_hours and queue_hours != "open_24x7":
+        reply_payload["next_business_day_routing"] = True
+        reply_payload["specialist_queue_open"] = False
     if queue == "billing_specialist":
         reply_payload["verbatim_key"] = "transfer_to_specialist"
+
+    mock_res = _check_mock_mode("handover_to_person", state, resolved_lang, reference, reply_payload)
+    if mock_res:
+        return mock_res
 
     return ok_reply(
         reply_payload,
@@ -1585,8 +1763,8 @@ def get_billing_summary_impl(
 
     _record_audit(state)
 
-    bal = str(state.get("current_balance") or "85.50")
-    past_due = str(state.get("past_due_balance") or "85.50")
+    bal = str(state.get("current_balance") or "0.00")
+    past_due = str(state.get("past_due_balance") or "0.00")
     card_l4 = str(state.get("card_last4") or "7742")
     bank_l4 = str(state.get("bank_last4") or "6789")
     is_susp = bool(state.get("is_suspended", False))
@@ -1652,7 +1830,7 @@ def get_billing_summary_impl(
         p for p in recent_pmts
         if p.get("status") == "posted" and p.get("applied_to_suspension") is not False
     ]
-    last_pmt_amt_str = str(posted_pmts[0].get("amount", "85.50")) if posted_pmts else "85.50"
+    last_pmt_amt_str = str(posted_pmts[0].get("amount", "0.00")) if posted_pmts else "0.00"
     last_pmt_date = str(posted_pmts[0].get("date", "2026-10-15")) if posted_pmts else "2026-10-15"
     last_pmt_method = str(state.get("last_payment_method") or (posted_pmts[0].get("payment_method", "card") if posted_pmts else "card"))
 
@@ -1732,7 +1910,7 @@ def get_billing_summary_impl(
             "suspension_reason": susp_reason,
             "recent_charges": line_items,
             "recent_payments": recent_pmts,
-            "duplicate_payment_amount": "85.50",
+            "duplicate_payment_amount": last_pmt_amt_str,
             "daily_outage_proration_rate": "2.85",
             "adjustments": adjustments,
             "statement_total": stmt_tot_str,
@@ -1794,7 +1972,7 @@ def process_bill_payment_impl(
         return error_reply("INVALID_INPUT", reference=reference, language=lang)
     amt_raw = str(amount or "").strip().lower()
     if not amt_raw or amt_raw in {"full", "balance", "solde"}:
-        amt_val = _parse_positive_money(state.get("current_balance") or "85.50")
+        amt_val = _parse_positive_money(state.get("current_balance") or "0.00")
     else:
         amt_val = _parse_positive_money(amount)
     if amt_val is None:
@@ -1897,9 +2075,37 @@ def process_bill_payment_impl(
         past_due_dec = Decimal(past_due_raw)
     except Exception:
         past_due_dec = Decimal("0.00")
+    cur_bal_raw = str(state.get("current_balance") or "0.00").strip()
+    try:
+        cur_bal_dec = Decimal(cur_bal_raw)
+    except Exception:
+        cur_bal_dec = Decimal("0.00")
+
     was_past_due = past_due_dec > Decimal("0.00")
     was_suspended = bool(state.get("is_suspended", False))
-    suspension_avoided = was_past_due or was_suspended
+
+    new_cur_bal = max(Decimal("0.00"), cur_bal_dec - amt_val)
+    new_past_due = max(Decimal("0.00"), past_due_dec - amt_val)
+    rem_bal_str = display_amount(new_cur_bal)
+    past_due_str = display_amount(new_past_due)
+
+    if was_past_due:
+        cleared_past_due = new_past_due == Decimal("0.00")
+        suspension_avoided = cleared_past_due
+    else:
+        cleared_past_due = True
+        suspension_avoided = was_suspended
+
+    service_restored = bool(was_suspended and cleared_past_due)
+    if service_restored or (not was_suspended and cleared_past_due):
+        state["is_suspended"] = False
+        state["suspension_reason"] = ""
+        state["service_restored"] = True if was_suspended else bool(state.get("service_restored", False))
+        service_status = "active"
+    else:
+        state["is_suspended"] = True
+        state["service_restored"] = False
+        service_status = "suspended"
 
     state["payment_failure_count"] = 0
     if is_bank:
@@ -1909,11 +2115,8 @@ def process_bill_payment_impl(
         state["card_last4"] = l4
         eff_method = str(payment_method or "card_on_file")
     state["last_payment_method"] = eff_method
-    state["current_balance"] = "0.00"
-    state["past_due_balance"] = "0.00"
-    state["is_suspended"] = False
-    state["suspension_reason"] = ""
-    state["service_restored"] = True
+    state["current_balance"] = rem_bal_str
+    state["past_due_balance"] = past_due_str
 
     conf = tracking_id("PAY", account_id, amt_str)
     state["last_tracking_id"] = conf
@@ -1927,7 +2130,11 @@ def process_bill_payment_impl(
         method_fr = f"carte se terminant par {l4}"
         method_es = f"tarjeta que termina en {l4}"
 
-    if suspension_avoided:
+    if service_status == "suspended":
+        status_en = f"remaining past due balance is ${past_due_str}; service remains suspended until past due balance is fully paid."
+        status_fr = f"le solde en souffrance restant est de {past_due_str} $; le service reste suspendu jusqu'au paiement intégral."
+        status_es = f"el saldo vencido restante es de ${past_due_str}; el servicio permanece suspendido hasta que se pague por completo."
+    elif suspension_avoided:
         status_en = "your service is active and no suspension is pending."
         status_fr = "votre service est actif et aucune suspension n'est en attente."
         status_es = "su servicio está activo y no hay ninguna suspensión pendiente."
@@ -1938,22 +2145,24 @@ def process_bill_payment_impl(
 
     summary = localized_text(
         lang,
-        f"Payment of ${amt_str} with the {method_en} processed, confirmation {conf}; remaining balance $0.00; {status_en}",
-        f"Paiement de {amt_str} $ avec la {method_fr} traité, confirmation {conf}; solde restant 0.00 $; {status_fr}",
-        f"Pago de ${amt_str} con la {method_es} procesado, confirmación {conf}; saldo restante $0.00; {status_es}",
+        f"Payment of ${amt_str} with the {method_en} processed, confirmation {conf}; remaining balance ${rem_bal_str}; {status_en}",
+        f"Paiement de {amt_str} $ avec la {method_fr} traité, confirmation {conf}; solde restant {rem_bal_str} $; {status_fr}",
+        f"Pago de ${amt_str} con la {method_es} procesado, confirmación {conf}; saldo restante ${rem_bal_str}; {status_es}",
     )
 
     reply_data: dict[str, Any] = {
         "payment_processed": True,
         "amount_paid": amt_str,
-        "remaining_balance": "0.00",
+        "remaining_balance": rem_bal_str,
+        "past_due_balance": past_due_str,
+        "remaining_past_due_balance": past_due_str,
         "payment_method": eff_method if is_bank else payment_method,
         "masked_last4": l4,
         "confirmation_number": conf,
-        "service_restored": True,
-        "service_status": "active",
+        "service_restored": service_restored,
+        "service_status": service_status,
         "suspension_avoided": suspension_avoided,
-        "restoration_eta_minutes": 15,
+        "restoration_eta_minutes": 15 if service_restored else 0,
         "spoken_summary": summary,
         "spoken_message": summary,
     }
@@ -2031,7 +2240,7 @@ def setup_payment_arrangement_impl(
         return error_reply("INVALID_INPUT", reference=reference, language=lang)
 
     if amount == "":
-        bal = _parse_positive_money(state.get("current_balance") or "85.50")
+        bal = _parse_positive_money(state.get("current_balance") or "0.00")
     else:
         bal = _parse_positive_money(amount)
     if bal is None:
@@ -2489,6 +2698,20 @@ def process_refund_or_dispute_impl(
 
     _record_audit(state)
 
+    limit_raw = state.get("loyalty_limit")
+    try:
+        limit_dec = Decimal(str(limit_raw or "25.00"))
+    except Exception:
+        limit_dec = Decimal("25.00")
+
+    mock_res = _check_mock_mode("process_refund_or_dispute", state, lang, reference, {
+        "approved": True,
+        "applied_amount": display_amount(limit_dec),
+        "confirmation_number": reference,
+    })
+    if mock_res:
+        return mock_res
+
     if outage_days in ("", 0, "0", 0.0):
         o_days = 0
     else:
@@ -2496,124 +2719,89 @@ def process_refund_or_dispute_impl(
         if o_days is None:
             return error_reply("INVALID_INPUT", reference=reference, language=lang)
 
-    if o_days > 0 or "outage" in str(dispute_type).lower():
+    is_outage = o_days > 0 or "outage" in str(dispute_type).lower() or "panne" in str(reason).lower()
+    dup_kw = ("overpayment", "duplicate", "double", "twice", "trop-perçu", "trop percu", "payé deux fois", "deux fois", "doublon")
+    is_dup = any(w in str(reason).lower() or w in str(dispute_type).lower() for w in dup_kw)
+
+    if is_outage:
         if o_days == 0:
             o_days = 3
         amt_dec = Decimal(o_days) * Decimal("2.85")
-        amt_disp = display_amount(amt_dec)
-        cur_bal = Decimal(str(state.get("current_balance") or "85.50"))
-        state["current_balance"] = display_amount(max(Decimal(0), cur_bal - amt_dec))
-        state["refund_applied_amount"] = amt_disp
-        ref = tracking_id("CRD", account_id, amt_disp)
-        state["last_tracking_id"] = ref
-        spoken_confirm = spoken_line("refund_confirmation_pattern", lang, amount=amt_disp, days=5)
-        conf_line = spoken_line("confirmation_number_line", lang, ref=ref, confirmation_number=ref)
-        full_confirm = f"{spoken_confirm} {conf_line}".strip()
-        return ok_reply(
-            {
-                "approved": True,
-                "dispute_type": "outage_credit",
-                "outage_days": o_days,
-                "daily_rate": "2.85",
-                "applied_amount": amt_disp,
-                "applied_amount_display": amt_disp,
-                "credit_amount": amt_disp,
-                "settlement_days": 5,
-                "confirmation_number": ref,
-                "spoken_message": full_confirm,
-                "verbatim_confirmation": full_confirm,
-            },
-            ref,
-            language=lang,
-        )
-
-    dup_kw = ("overpayment", "duplicate", "double", "twice", "trop-perçu", "trop percu", "payé deux fois", "deux fois", "doublon")
-    is_dup = any(w in str(reason).lower() or w in str(dispute_type).lower() for w in dup_kw)
-    if is_dup:
+        claim_kind = "outage_credit"
+    elif is_dup:
+        fx_dup = get_fixture_fact(state, "fx_duplicate_payment_amount")
+        if amount != "":
+            amt_dec = _parse_positive_money(amount)
+        elif fx_dup and str(fx_dup).strip().lower() not in {"none", "0", "false"}:
+            amt_dec = _parse_positive_money(fx_dup)
+        else:
+            rec_pmts = FAKE_BILLING_LEDGER.get("recent_payments", [])
+            amt_dec = Decimal(str(rec_pmts[0]["amount"])) if rec_pmts else limit_dec
+        claim_kind = "duplicate_payment"
+    else:
         if amount == "":
-            amt_dec = Decimal(str(FAKE_BILLING_LEDGER["recent_payments"][0]["amount"]))
+            amt_dec = Decimal("15.00")
         else:
             amt_dec = _parse_positive_money(amount)
-            if amt_dec is None:
-                return error_reply("INVALID_INPUT", reference=reference, language=lang)
-        amt_disp = display_amount(amt_dec)
-        cur_bal = Decimal(str(state.get("current_balance") or "85.50"))
-        state["current_balance"] = display_amount(max(Decimal(0), cur_bal - amt_dec))
-        state["refund_applied_amount"] = amt_disp
-        ref = tracking_id("REF", account_id, amt_disp)
-        state["last_tracking_id"] = ref
-        spoken_confirm = spoken_line("refund_confirmation_pattern", lang, amount=amt_disp, days=5)
-        conf_line = spoken_line("confirmation_number_line", lang, ref=ref, confirmation_number=ref)
-        full_confirm = f"{spoken_confirm} {conf_line}".strip()
-        return ok_reply(
-            {
-                "approved": True,
-                "refund_type": "duplicate_payment",
-                "applied_amount": amt_disp,
-                "applied_amount_display": amt_disp,
-                "credit_amount": amt_disp,
-                "card_last4": state.get("card_last4", "7742"),
-                "settlement_days": 5,
-                "confirmation_number": ref,
-                "spoken_message": full_confirm,
-                "verbatim_confirmation": full_confirm,
-            },
-            ref,
-            language=lang,
-        )
+        claim_kind = "credit_adjustment"
 
-    if amount == "":
-        amt_dec = Decimal("15.00")
-    else:
-        amt_dec = _parse_positive_money(amount)
-        if amt_dec is None:
-            return error_reply("INVALID_INPUT", reference=reference, language=lang)
+    if amt_dec is None:
+        return error_reply("INVALID_INPUT", reference=reference, language=lang)
+
     amt_disp = display_amount(amt_dec)
-    if amt_dec <= Decimal("25.00"):
-        cur_bal = Decimal(str(state.get("current_balance") or "85.50"))
-        state["current_balance"] = display_amount(max(Decimal(0), cur_bal - amt_dec))
-        state["refund_applied_amount"] = amt_disp
-        ref = tracking_id("CRD", account_id, amt_disp)
-        state["last_tracking_id"] = ref
-        spoken_confirm = spoken_line("refund_confirmation_pattern", lang, amount=amt_disp, days=5)
-        conf_line = spoken_line("confirmation_number_line", lang, ref=ref, confirmation_number=ref)
-        full_confirm = f"{spoken_confirm} {conf_line}".strip()
+
+    if amt_dec > limit_dec:
+        tkt = tracking_id("DSP", account_id, amt_disp)
+        state["dispute_ticket_id"] = tkt
+        state["handoff_reason"] = "refund_threshold_exceeded"
+        specialist_msg = spoken_line("transfer_to_specialist", lang)
+        state["handoff_message"] = specialist_msg
         return ok_reply(
             {
-                "approved": True,
-                "applied_amount": amt_disp,
-                "applied_amount_display": amt_disp,
-                "credit_amount": amt_disp,
-                "settlement_days": 5,
-                "confirmation_number": ref,
-                "spoken_message": full_confirm,
-                "verbatim_confirmation": full_confirm,
+                "approved": False,
+                "exceeds_self_serve_cap": True,
+                "self_serve_cap": display_amount(limit_dec),
+                "dispute_ticket_id": tkt,
+                "must_escalate_immediately": True,
+                "escalation_reason": "refund_threshold_exceeded",
+                "target_queue": "billing_specialist",
+                "handoff_message": specialist_msg,
+                "spoken_message": specialist_msg,
+                "verbatim_key": "transfer_to_specialist",
             },
-            ref,
+            tkt,
             language=lang,
         )
 
-    tkt = tracking_id("DSP", account_id, amt_disp)
-    state["dispute_ticket_id"] = tkt
-    state["handoff_reason"] = "refund_threshold_exceeded"
-    specialist_msg = spoken_line("transfer_to_specialist", lang)
-    state["handoff_message"] = specialist_msg
-    return ok_reply(
-        {
-            "approved": False,
-            "exceeds_self_serve_cap": True,
-            "self_serve_cap": "25.00",
-            "dispute_ticket_id": tkt,
-            "must_escalate_immediately": True,
-            "escalation_reason": "refund_threshold_exceeded",
-            "target_queue": "billing_specialist",
-            "handoff_message": specialist_msg,
-            "spoken_message": specialist_msg,
-            "verbatim_key": "transfer_to_specialist",
-        },
-        tkt,
-        language=lang,
-    )
+    cur_bal = Decimal(str(state.get("current_balance") or "0.00"))
+    state["current_balance"] = display_amount(max(Decimal(0), cur_bal - amt_dec))
+    state["refund_applied_amount"] = amt_disp
+    prefix = "CRD" if claim_kind != "duplicate_payment" else "REF"
+    ref = tracking_id(prefix, account_id, amt_disp)
+    state["last_tracking_id"] = ref
+    spoken_confirm = spoken_line("refund_confirmation_pattern", lang, amount=amt_disp, days=5)
+    conf_line = spoken_line("confirmation_number_line", lang, ref=ref, confirmation_number=ref)
+    full_confirm = f"{spoken_confirm} {conf_line}".strip()
+
+    ok_payload: dict[str, Any] = {
+        "approved": True,
+        "dispute_type": claim_kind,
+        "applied_amount": amt_disp,
+        "applied_amount_display": amt_disp,
+        "credit_amount": amt_disp,
+        "settlement_days": 5,
+        "confirmation_number": ref,
+        "spoken_message": full_confirm,
+        "verbatim_confirmation": full_confirm,
+    }
+    if claim_kind == "outage_credit":
+        ok_payload["outage_days"] = o_days
+        ok_payload["daily_rate"] = "2.85"
+    elif claim_kind == "duplicate_payment":
+        ok_payload["refund_type"] = "duplicate_payment"
+        ok_payload["card_last4"] = state.get("card_last4", "7742")
+
+    return ok_reply(ok_payload, ref, language=lang)
 
 
 # ============================================================================
@@ -2749,13 +2937,20 @@ def run_troubleshooting_and_sms_impl(
     st = str(service_type or "internet").lower()
     tv_sub = str(tv_sub_type or state.get("tv_sub_type") or "").lower()
 
-    if "101" in sym or "satellite" in sym or tv_sub == "satellite":
-        guide_key = "tv_satellite_101"
-        state["tv_sub_type"] = "satellite"
-    elif "fibe" in sym or "app" in sym or "stream" in sym or tv_sub == "streaming":
-        guide_key = "tv_satellite_101"
-        state["tv_sub_type"] = "streaming"
-    elif st == "mobility" or any(w in sym for w in ("sim", "puk", "mobile", "data", "bell", "cellular")):
+    is_tv = (
+        st in {"tv", "television", "video"}
+        or str(state.get("lob", "")).lower() == "tv"
+        or tv_sub in {"satellite", "streaming", "fibe"}
+        or any(w in sym for w in ("satellite", "receiver", "dish", "signal", "antenna", "transponder", "channel", "guide", "tv", "télé", "tele", "antenne", "récepteur", "recepteur", "fibe", "stream"))
+    )
+    if is_tv:
+        if tv_sub == "streaming" or any(w in sym for w in ("app", "stream", "fibe")):
+            guide_key = "tv_streaming" if "tv_streaming" in FAKE_TROUBLESHOOTING_GUIDES else "tv_satellite_101"
+            state["tv_sub_type"] = "streaming"
+        else:
+            guide_key = "tv_satellite" if "tv_satellite" in FAKE_TROUBLESHOOTING_GUIDES else "tv_satellite_101"
+            state["tv_sub_type"] = "satellite"
+    elif st == "mobility" or str(state.get("lob", "")).lower() == "mobility" or any(w in sym for w in ("sim", "puk", "mobile", "data", "cellular")):
         guide_key = "mobility_data"
     else:
         guide_key = "internet"
@@ -3047,7 +3242,35 @@ def manage_appointment_impl(
             slot_match = s_item
             break
     if not slot_match:
-        slot_match = dyn_slots[0]
+        avail_slots = [
+            {
+                "slot_id": s["slot_id"],
+                "date": s["date"],
+                "window": s.get(
+                    "window_fr" if lang == "fr-CA" else ("window_es" if lang == "es-US" else "window_en"),
+                    s.get("window_en", ""),
+                ),
+            }
+            for s in dyn_slots
+        ]
+        action_text = localized_text(
+            lang,
+            "Offer available reschedule slots to the caller and ask which one they prefer.",
+            "Proposez les créneaux disponibles au client et demandez-lui lequel il préfère.",
+            "Ofrezca los horarios disponibles al cliente y pregunte cuál prefiere.",
+        )
+        return error_reply(
+            "OUT_OF_WINDOW",
+            reference=reference,
+            language=lang,
+            agent_action=action_text,
+            data={
+                "appointment_rescheduled": False,
+                "requested_slot": raw_sel,
+                "available_slots": avail_slots,
+                "appointment_id": state.get("active_appointment_id", "APT-4021"),
+            },
+        )
 
     state["appointment_status"] = "rescheduled"
     ref = tracking_id("RES_APT", account_id, slot_match["slot_id"])
@@ -3186,11 +3409,17 @@ def browse_plans_and_coverage_impl(
         a_copy["estimated_tax"] = str(a_tax)
         a_copy["estimated_total_monthly"] = str(a_total)
         a_copy["monthly_total_with_tax"] = str(a_total)
-        if a.get("category") == "tv" or a.get("id") == "ADDON-SPORTS":
-            a_copy["included_channels"] = "TSN 1-5, Sportsnet, ESPN, FS1, RDS, NBA TV, MLB Network, NFL Network, Golf Channel, and regional sports networks in 4K/HD"
-            a_copy["combined_monthly_with_tv_starter"] = "43.00"
-            a_copy["combined_monthly_with_tv_starter_before_tax"] = "43.00"
-            a_copy["combined_monthly_with_tv_starter_with_tax"] = "49.45"
+        if a.get("included_channels"):
+            a_copy["included_channels"] = a["included_channels"]
+            tv_plans = FAKE_PLAN_CATALOG.get("tv", [])
+            base_tv_plan = next((p for p in tv_plans if "starter" in p.get("id", "").lower() or "starter" in p.get("name", "").lower()), tv_plans[0] if tv_plans else None)
+            base_price = Decimal(str(base_tv_plan.get("monthly_price", 25.00))) if base_tv_plan else Decimal("25.00")
+            comb_before_tax = (base_price + a_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            comb_tax = (comb_before_tax * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            comb_with_tax = (comb_before_tax + comb_tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            a_copy["combined_monthly_with_tv_starter"] = display_amount(comb_before_tax)
+            a_copy["combined_monthly_with_tv_starter_before_tax"] = display_amount(comb_before_tax)
+            a_copy["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
         addons_enriched.append(a_copy)
 
     state["shortlisted_plan_ids"] = ",".join(p["id"] for p in shortlist)
@@ -3370,11 +3599,18 @@ def commit_plan_or_order_impl(
         "quote_summary": quote_summary,
         "current_active_plans": _active_account_plans(state, lang),
     }
-    if chosen_plan_id == "ADDON-SPORTS" or (plan_info and plan_info.get("category") == "tv"):
-        quote_data["included_channels"] = "TSN 1-5, Sportsnet, ESPN, FS1, RDS, NBA TV, MLB Network, NFL Network, Golf Channel, and regional sports networks in 4K/HD"
-        quote_data["combined_monthly_with_tv_starter"] = "43.00"
-        quote_data["combined_monthly_with_tv_starter_before_tax"] = "43.00"
-        quote_data["combined_monthly_with_tv_starter_with_tax"] = "49.45"
+    addon_obj = next((a for a in FAKE_ADDON_CATALOG if a.get("id") == chosen_plan_id), None)
+    if addon_obj and addon_obj.get("included_channels"):
+        quote_data["included_channels"] = addon_obj["included_channels"]
+        tv_plans = FAKE_PLAN_CATALOG.get("tv", [])
+        base_tv_plan = next((p for p in tv_plans if "starter" in p.get("id", "").lower() or "starter" in p.get("name", "").lower()), tv_plans[0] if tv_plans else None)
+        base_price = Decimal(str(base_tv_plan.get("monthly_price", 25.00))) if base_tv_plan else Decimal("25.00")
+        comb_before_tax = (base_price + p_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_tax = (comb_before_tax * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_with_tax = (comb_before_tax + comb_tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        quote_data["combined_monthly_with_tv_starter"] = display_amount(comb_before_tax)
+        quote_data["combined_monthly_with_tv_starter_before_tax"] = display_amount(comb_before_tax)
+        quote_data["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
 
     if not _is_truthy_bool(confirmed):
         action_text = localized_text(
@@ -3422,11 +3658,17 @@ def commit_plan_or_order_impl(
         "destination_phone_last4": p_l4,
         "current_active_plans": _active_account_plans(state, lang),
     }
-    if chosen_plan_id == "ADDON-SPORTS" or (plan_info and plan_info.get("category") == "tv"):
-        order_payload["included_channels"] = "TSN 1-5, Sportsnet, ESPN, FS1, RDS, NBA TV, MLB Network, NFL Network, Golf Channel, and regional sports networks in 4K/HD"
-        order_payload["combined_monthly_with_tv_starter"] = "43.00"
-        order_payload["combined_monthly_with_tv_starter_before_tax"] = "43.00"
-        order_payload["combined_monthly_with_tv_starter_with_tax"] = "49.45"
+    if addon_obj and addon_obj.get("included_channels"):
+        order_payload["included_channels"] = addon_obj["included_channels"]
+        tv_plans = FAKE_PLAN_CATALOG.get("tv", [])
+        base_tv_plan = next((p for p in tv_plans if "starter" in p.get("id", "").lower() or "starter" in p.get("name", "").lower()), tv_plans[0] if tv_plans else None)
+        base_price = Decimal(str(base_tv_plan.get("monthly_price", 25.00))) if base_tv_plan else Decimal("25.00")
+        comb_before_tax = (base_price + p_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_tax = (comb_before_tax * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_with_tax = (comb_before_tax + comb_tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        order_payload["combined_monthly_with_tv_starter"] = display_amount(comb_before_tax)
+        order_payload["combined_monthly_with_tv_starter_before_tax"] = display_amount(comb_before_tax)
+        order_payload["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
 
     return ok_reply(
         order_payload,
@@ -3476,16 +3718,25 @@ def initiate_number_transfer_impl(
     ppin_raw = str(port_pin or kwargs.get("pin") or kwargs.get("donor_pin") or kwargs.get("transfer_pin") or "").strip()
     carrier = str(current_carrier or kwargs.get("carrier") or kwargs.get("donor_carrier") or "").strip()
 
-    action = str(kwargs.get("action") or kwargs.get("action_type") or kwargs.get("direction") or kwargs.get("transfer_type") or "").strip().lower()
-    carrier_lower = carrier.lower()
-    is_port_out = (
-        action in {"port_out", "portout", "outbound", "out", "cancel"}
-        or carrier_lower in {"bell", "our", "internal", "none"}
-    )
-
     account_id = str(state.get("account_id") or (ACCOUNTS[0]["account_id"] if ACCOUNTS else "ACC-0001"))
     reference = tracking_id("initiate_number_transfer", account_id, str(target_phone))
     state["last_tracking_id"] = reference
+
+    mock_res = _check_mock_mode("initiate_number_transfer", state, lang, reference, {
+        "status": "ok",
+        "mode": "transfer_submitted",
+        "port_in_request_id": reference,
+    })
+    if mock_res:
+        return mock_res
+
+    action = str(kwargs.get("action") or kwargs.get("action_type") or kwargs.get("direction") or kwargs.get("transfer_type") or "").strip().lower()
+    carrier_lower = carrier.lower()
+    is_port_out = (
+        action in {"port_out", "portout", "outbound", "out", "cancel", "transfer_out"}
+        or "out" in action
+        or any(w in carrier_lower for w in ("competitor", "other", "autrefournisseur"))
+    )
 
     timeline = localized_text(
         lang,
@@ -3495,8 +3746,9 @@ def initiate_number_transfer_impl(
     )
     est_completion = localized_text(lang, "15 to 30 minutes", "15 à 30 minutes", "15 a 30 minutos")
     disc_line = spoken_line("contract_cancellation_fee_disclosure", lang)
-    port_out_pin = "849201"
     port_acct = account_id
+    fx_pin = get_fixture_fact(state, "fx_pin_on_file")
+    port_out_pin = str(fx_pin or "").strip() or f"{(sum((i + 1) * ord(c) * 37 for i, c in enumerate(port_acct)) % 900000 + 100000):06d}"
 
     is_authenticated = state.get("auth_status") == "pass"
 
@@ -3553,8 +3805,6 @@ def initiate_number_transfer_impl(
                 "early_cancellation_fee": "0.00",
                 "final_bill_estimate": "28.50",
                 "prorated_final_bill_estimate": "28.50",
-                "port_out_pin": port_out_pin,
-                "transfer_pin": port_out_pin,
                 "porting_account_number": port_acct,
                 "agent_action": action_text,
             },
@@ -3654,6 +3904,14 @@ def manage_warranty_claim_impl(
     reference = tracking_id("manage_warranty_claim", account_id, str(issue_description))
     state["last_tracking_id"] = reference
 
+    mock_res = _check_mock_mode("manage_warranty_claim", state, lang, reference, {
+        "safety_hazard": True,
+        "claim_status": "urgent_safety_replacement",
+        "warranty_claim_id": tracking_id("SAF", account_id or "A1001"),
+    })
+    if mock_res:
+        return mock_res
+
     # Priority 1: Swollen battery hazard override
     desc_low = str(issue_description or "").lower()
     claim_low = str(claim_type or "").lower()
@@ -3661,10 +3919,37 @@ def manage_warranty_claim_impl(
         w in desc_low for w in ("swollen", "swelling", "bulging", "expanding", "expanded", "gonfl", "enfl", "bombé", "smoke", "fire")
     )
     if is_safety:
-        claim_id = tracking_id("SAF", account_id or "A1001")
-        state["warranty_claim_id"] = claim_id
+        _maybe_inline_auth(identifier, verification_code, lang, state)
+        if state.get("auth_status") == "pass" and not state.get("account_id"):
+            _hydrate_default_account_if_needed(state)
         instructions = FAKE_WARRANTY_DATA[f"battery_swelling_safety_{'fr' if lang=='fr-CA' else ('es' if lang=='es-US' else 'en')}"]
         eta_text = localized_text(lang, "1 business day", "1 jour ouvrable", "1 día hábil")
+
+        if state.get("auth_status") != "pass":
+            action_text = localized_text(
+                lang,
+                "Provide immediate safety instructions (do not charge or use device), then authenticate caller before submitting warranty claim.",
+                "Fournissez les consignes de sécurité immédiates (ne pas charger ni utiliser l'appareil), puis authentifiez l'appelant avant de soumettre la réclamation.",
+                "Proporcione instrucciones de seguridad inmediatas (no cargar ni usar el dispositivo), luego autentique al cliente antes de enviar el reclamo.",
+            )
+            return ok_reply(
+                {
+                    "safety_hazard": True,
+                    "claim_status": "pending_authentication",
+                    "requires_authentication": True,
+                    "auth_status": state.get("auth_status", "none"),
+                    "urgent_safety_instructions": instructions,
+                    "do_not_mail_warning": True,
+                    "safe_disposal_instructions": instructions,
+                    "spoken_message": instructions,
+                    "agent_action": action_text,
+                },
+                reference,
+                language=lang,
+            )
+
+        claim_id = tracking_id("SAF", account_id or "A1001")
+        state["warranty_claim_id"] = claim_id
         return ok_reply(
             {
                 "safety_hazard": True,
@@ -4195,14 +4480,37 @@ def execute_suspend_restore_impl(
     clean_reason = str(reason).strip() if (reason is not None and not isinstance(reason, bool) and str(reason).strip()) else "vacation"
 
     if act == "restore":
-        past_due_val = state.get("past_due_balance", "85.50")
+        past_due_val = state.get("past_due_balance", "0.00")
         try:
             past_due_dec = Decimal(str(past_due_val))
         except Exception:
             past_due_dec = Decimal("0.00")
 
+        fx_unapplied = get_fixture_fact(state, "fx_unapplied_payment")
+        has_negative_unapplied = fx_unapplied is not None and str(fx_unapplied).strip().lower() in {"none", "0", "false"}
+
         reported_pmt_raw = str(caller_reported_payment or "").strip()
         if reported_pmt_raw:
+            if has_negative_unapplied:
+                action_text = localized_text(
+                    lang,
+                    "Take the payment first (process_bill_payment), then restore.",
+                    "Effectuez d'abord le paiement (process_bill_payment), puis rétablissez le service.",
+                    "Tome el pago primero (process_bill_payment), luego restaure.",
+                )
+                return error_reply(
+                    "PAST_DUE_BALANCE_REQUIRED",
+                    reference=reference,
+                    language=lang,
+                    agent_action=action_text,
+                    data={
+                        "past_due_balance": display_amount(past_due_dec),
+                        "payment_required": True,
+                        "amount": display_amount(past_due_dec),
+                        "caller_reported_payment_verified": False,
+                    },
+                )
+
             recent_pmts = FAKE_BILLING_LEDGER.get("recent_payments", [])
             matching_pmt = next(
                 (
@@ -4212,15 +4520,35 @@ def execute_suspend_restore_impl(
                 ),
                 None,
             )
-            if matching_pmt is None:
-                matching_pmt = next((p for p in recent_pmts if p.get("status") == "posted"), None)
-
-            pmt_date = str(matching_pmt.get("date", "2026-10-28")) if matching_pmt else "2026-10-28"
-            pmt_amt = (
-                display_amount(matching_pmt.get("amount", past_due_dec))
-                if matching_pmt
-                else display_amount(past_due_dec)
-            )
+            if fx_unapplied and not has_negative_unapplied:
+                try:
+                    unapp_amt_dec = Decimal(str(fx_unapplied))
+                except Exception:
+                    unapp_amt_dec = past_due_dec
+                pmt_date = "2026-10-28"
+                pmt_amt = display_amount(unapp_amt_dec)
+            elif matching_pmt:
+                pmt_date = str(matching_pmt.get("date", "2026-10-28"))
+                pmt_amt = display_amount(matching_pmt.get("amount", past_due_dec))
+            else:
+                action_text = localized_text(
+                    lang,
+                    "Take the payment first (process_bill_payment), then restore.",
+                    "Effectuez d'abord le paiement (process_bill_payment), puis rétablissez le service.",
+                    "Tome el pago primero (process_bill_payment), luego restaure.",
+                )
+                return error_reply(
+                    "PAST_DUE_BALANCE_REQUIRED",
+                    reference=reference,
+                    language=lang,
+                    agent_action=action_text,
+                    data={
+                        "past_due_balance": display_amount(past_due_dec),
+                        "payment_required": True,
+                        "amount": display_amount(past_due_dec),
+                        "caller_reported_payment_verified": False,
+                    },
+                )
 
             state["is_suspended"] = False
             state["suspension_reason"] = ""
@@ -4238,6 +4566,7 @@ def execute_suspend_restore_impl(
                 {
                     "status": "restored",
                     "service_restored": True,
+                    "caller_reported_payment_verified": True,
                     "restored_after_payment": True,
                     "is_suspended": False,
                     "past_due_balance": "0.00",
@@ -4436,6 +4765,14 @@ def cancel_or_port_out_service_impl(
 
     _record_audit(state)
 
+    mock_res = _check_mock_mode("cancel_or_port_out_service", state, lang, reference, {
+        "service_cancelled": True,
+        "cancellation_confirmation_id": reference,
+        "confirmation_number": reference,
+    })
+    if mock_res:
+        return mock_res
+
     monthly_rate = FAKE_BILLING_LEDGER["recent_line_items"][0]["amount"]
     rem_rates = localized_text(
         lang,
@@ -4470,22 +4807,12 @@ def cancel_or_port_out_service_impl(
         and str(decline_retention_offer).lower() in {"true", "1", "yes", "oui"}
     )
 
-    reason_str = " ".join([
-        str(reason or ""),
-        str(kwargs.get("notes") or ""),
-        str(kwargs.get("details") or ""),
-        str(kwargs.get("comments") or ""),
-    ]).strip().lower()
-
-    has_retention_reason = any(kw in reason_str for kw in ("retention", "loyalty", "credit", "keep service", "keep the", "stay", "retain"))
-
     is_accept_retention = (
         not is_decline_retention
         and (
             (bool(accept_retention_offer) and str(accept_retention_offer).lower() in {"true", "1", "yes", "oui", "si", "accept"})
             or action in {"retain", "keep", "accept_retention", "loyalty_credit", "retention"}
             or bool(kwargs.get("accept_retention_offer"))
-            or has_retention_reason
         )
     )
 
@@ -4513,7 +4840,8 @@ def cancel_or_port_out_service_impl(
         return ok_reply(res_retention, ret_id, language=lang)
 
     port_account = account_id if account_id else (ACCOUNTS[0]["account_id"] if ACCOUNTS else "ACC-0001")
-    transfer_pin = "849201"
+    fx_pin = get_fixture_fact(state, "fx_pin_on_file")
+    transfer_pin = str(fx_pin or "").strip() or f"{(sum((i + 1) * ord(c) * 37 for i, c in enumerate(port_account)) % 900000 + 100000):06d}"
 
     timeline = localized_text(
         lang,
@@ -4550,8 +4878,8 @@ def cancel_or_port_out_service_impl(
         }
         if is_port_out:
             data["porting_account_number"] = port_account
-            data["transfer_pin"] = transfer_pin
-            data["port_out_pin"] = transfer_pin
+            data["action_type"] = "port_out"
+            data["transfer_pin_withheld_pending_confirmation"] = True
         return ok_reply(
             data,
             reference,

@@ -128,7 +128,7 @@ def normalize_money_str(amount: str | int | float | Decimal) -> str:
 
 
 def display_amount(value: Any) -> str:
-    """Format money for speech: 85.5 -> "85.50" (two decimals, half-up rounding)."""
+    """Format money for speech: 12.5 -> "12.50" (two decimals, half-up rounding)."""
     if isinstance(value, bool) or value is None:
         raise ValueError(f"not an amount: {value!r}")
     try:

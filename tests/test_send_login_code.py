@@ -267,7 +267,7 @@ def test_send_login_code_email_spoken_phrases_locales(monkeypatch) -> None:
     assert res_dubois["data"]["email_domain"] == "example.fr"
     assert "commençant par « j »" in res_dubois["data"]["spoken_message"]
 
-    # Caller-provided email in identifier also resolves account when session has no account_id yet
+    # Caller-provided unknown email when session has no account_id returns NOT_FOUND (Defect 5)
     session_unidentified_email = SimpleNamespace(state={"auth_status": "none"})
     monkeypatch.setattr(tool, "context", session_unidentified_email, raising=False)
     res_unid = tool.send_login_code(
@@ -275,6 +275,16 @@ def test_send_login_code_email_spoken_phrases_locales(monkeypatch) -> None:
         channel="email",
         language="fr-CA",
     )
-    assert res_unid["status"] == "ok"
-    assert session_unidentified_email.state["contact_email"] == "jl.dubois@example.fr"
-    assert res_unid["data"]["masked_email"] == "j***@example.fr"
+    assert res_unid["status"] == "error"
+    assert res_unid["error"] == "NOT_FOUND"
+
+    # When recognized identifier is provided, email code is dispatched
+    session_identified = SimpleNamespace(state={"auth_status": "none"})
+    monkeypatch.setattr(tool, "context", session_identified, raising=False)
+    res_id = tool.send_login_code(
+        identifier="2025550143",
+        channel="email",
+        language="fr-CA",
+    )
+    assert res_id["status"] == "ok"
+    assert res_id["data"]["masked_email"] == "j***@example.com"

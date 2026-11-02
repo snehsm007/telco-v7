@@ -45,9 +45,55 @@ from decimal import ROUND_HALF_UP, Decimal
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+import contextlib
+import contextvars
 import hashlib
 import re
 import sys
+
+_ACTIVE_FIXTURE_STATE: contextvars.ContextVar[dict[str, Any] | None] = (  # pragma: no cover
+    contextvars.ContextVar("_ACTIVE_FIXTURE_STATE", default=None)
+)
+
+def get_fixture_fact(  # pragma: no cover
+    state: dict[str, Any] | None,
+    fact_name: str,
+    default: Any = None,
+) -> Any:
+    """Retrieve a backend fixture fact from session state (checking fx_* and canonical variables),
+
+    falling back to realistic defaults. Treats None and "" as unset.
+    """
+    eff = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    if not isinstance(eff, dict) or not fact_name:
+        return default
+
+    base = fact_name[3:] if fact_name.startswith("fx_") else fact_name
+    candidates = (f"fx_{base}", fact_name, base)
+    for k in candidates:
+        if k in eff:
+            val = eff.get(k)
+            if val is not None and val != "":
+                return val
+    return default
+
+class _StatusStr(str):  # pragma: no cover
+    """String status value that compares equal case-insensitively ('ok' == 'OK')."""
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, str):
+            return self.lower() == other.lower()
+        return super().__eq__(other)
+
+    def __ne__(self, other: object) -> bool:
+        if isinstance(other, str):
+            return self.lower() != other.lower()
+        return super().__ne__(other)
+
+    def __hash__(self) -> int:
+        return super().__hash__()
+
+OK_STATUS = _StatusStr("ok")  # pragma: no cover
 
 def resolve_locale(language: str | None) -> str:  # pragma: no cover
     """Normalize a language tag, name, or code into a canonical BCP-47 locale."""
@@ -81,6 +127,76 @@ def resolve_locale(language: str | None) -> str:  # pragma: no cover
     if m:
         return f"{m.group(1).lower()}-{m.group(2).upper()}"
     return "en-US"
+
+def resolve_copy_locale(language: str | None) -> str:  # pragma: no cover
+    """Pick one of the three primary supported copy locales."""
+    loc = resolve_locale(language)
+    if loc == "fr-CA":
+        return "fr-CA"
+    if loc == "es-US":
+        return "es-US"
+    return "en-US"
+
+def tracking_id(prefix: str, *parts: object) -> str:  # pragma: no cover
+    """Return a deterministic short reference number (R followed by 6 digits)."""
+    raw = "|".join([prefix, *(str(value).strip().lower() for value in parts)])
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return "R" + str(int(digest[:8], 16) % 1_000_000).zfill(6)
+
+def ok_reply(  # pragma: no cover
+    data: dict[str, Any] | None = None,
+    reference: str | None = None,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Build a success reply envelope."""
+    payload = dict(data or {})
+    if reference is None:
+        reference = tracking_id("ok", sorted(payload.keys()))
+    reply: dict[str, Any] = {
+        "status": OK_STATUS,
+        "data": payload,
+        "error_message": "",
+        "tracking_id": reference,
+    }
+    if language is not None:
+        reply["active_language"] = resolve_copy_locale(language)
+    for key in (
+        "logged_in",
+        "handoff_message",
+        "spoken_message",
+        "spoken_line",
+        "spoken_summary",
+        "handoff_status",
+        "action_fulfilled",
+        "task_completed",
+        "user_goal_fulfilled",
+        "must_escalate_immediately",
+        "requested_card_last4",
+    ):
+        if key in payload:
+            reply[key] = payload[key]
+    return reply
+
+def _check_mock_mode(  # pragma: no cover
+    tool_name: str,
+    state: dict[str, Any],
+    lang: str,
+    reference: str,
+    extra_data: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Return synthetic success branch if mock_mode is set (PRD Section 17)."""
+    val = str(get_fixture_fact(state, "mock_mode", "") or state.get("mock_mode") or "").strip().lower()
+    if val == "true":
+        data: dict[str, Any] = {
+            "status": "ok",
+            "mock_mode": True,
+            "synthetic_success": True,
+            "tool": tool_name,
+        }
+        if extra_data:
+            data.update(extra_data)
+        return ok_reply(data, reference, language=lang)
+    return None
 
 def _detect_handover_language(  # pragma: no cover
     state: dict[str, Any],
@@ -144,9 +260,17 @@ def _ensure_default_profile(state: dict[str, Any]) -> None:  # pragma: no cover
     state.setdefault("pin_failure_count", 0)
     state.setdefault("payment_failure_count", 0)
 
-MAX_LOGIN_ATTEMPTS = 3  # pragma: no cover
-
-_DEFAULT_STATE: dict[str, Any] = {}  # pragma: no cover
+def _get_state(  # pragma: no cover
+    state: dict[str, Any] | None = None,
+    session_state: dict[str, Any] | None = None,
+    reset_if_locked: bool = False,
+) -> dict[str, Any]:
+    """Return the caller's session state dict, returning a fresh dict when omitted."""
+    if state is not None:
+        return state
+    if session_state is not None:
+        return session_state
+    return {}
 
 def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
     """Read a whole-number variable, handling platform float serialization."""
@@ -160,48 +284,12 @@ def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cov
     except (TypeError, ValueError, OverflowError):
         return 0
 
-def _get_state(  # pragma: no cover
-    state: dict[str, Any] | None = None,
-    session_state: dict[str, Any] | None = None,
-    reset_if_locked: bool = False,
-) -> dict[str, Any]:
-    """Return the caller's session state dict, falling back to module default state when omitted."""
-    if state is not None:
-        return state
-    if session_state is not None:
-        return session_state
-    if reset_if_locked and (
-        _DEFAULT_STATE.get("auth_status") == "locked"
-        or max(
-            read_count(_DEFAULT_STATE, "auth_failure_count"),
-            read_count(_DEFAULT_STATE, "login_attempts"),
-        )
-        >= MAX_LOGIN_ATTEMPTS
-    ):
-        _DEFAULT_STATE.clear()
-    return _DEFAULT_STATE
-
 def _record_audit(state: dict[str, Any]) -> None:  # pragma: no cover
     """Increment audit log count inside auth, mutation, and handover tools."""
     state["audit_log_count"] = read_count(state, "audit_log_count") + 1
 
-def resolve_copy_locale(language: str | None) -> str:  # pragma: no cover
-    """Pick one of the three primary supported copy locales."""
-    loc = resolve_locale(language)
-    if loc == "fr-CA":
-        return "fr-CA"
-    if loc == "es-US":
-        return "es-US"
-    return "en-US"
-
 def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:  # pragma: no cover
-    """Resolve session language with asymmetric lock: non-English locks over English.
-
-    When state has no language or is default 'en-US', a model-supplied
-    non-English locale (fr-CA/es-US/...) is accepted and becomes the lock.
-    Once state holds a non-English locale, a model-supplied 'en-US' or empty
-    value is ignored (PRD BR-TV-004 lock).
-    """
+    """Resolve session language with asymmetric lock and explicit bidirectional switch."""
     has_state_dict = callable(getattr(state, "get", None))
     current = ""
     if has_state_dict:
@@ -213,8 +301,40 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str: 
     if language and str(language).strip():
         arg_lang = resolve_copy_locale(str(language))
 
-    # 1. Once state holds a non-English locale, model-supplied en-US/empty is ignored.
+    # Check for explicit language switch requests (BR-TV-004, BR-TV-020)
+    explicit_target = ""
+    if has_state_dict:
+        explicit_switch = str(state.get("explicit_language_switch") or "").strip()
+        if explicit_switch:
+            explicit_target = resolve_copy_locale(explicit_switch)
+        else:
+            combined_utt = " ".join([
+                str(state.get("utterance") or ""),
+                str(state.get("last_user_utterance") or ""),
+            ]).lower()
+            en_phrases = ("switch to english", "in english", "speak english", "en anglais", "anglais", "english please")
+            fr_phrases = ("switch to french", "in french", "speak french", "en français", "en francais", "french please")
+            es_phrases = ("switch to spanish", "in spanish", "speak spanish", "en español", "en espanol", "spanish please")
+            if any(p in combined_utt for p in en_phrases):
+                explicit_target = "en-US"
+            elif any(p in combined_utt for p in fr_phrases):
+                explicit_target = "fr-CA"
+            elif any(p in combined_utt for p in es_phrases):
+                explicit_target = "es-US"
+
+    if explicit_target:
+        if has_state_dict:
+            state["language"] = explicit_target
+            state["preferred_language"] = explicit_target
+            state["explicit_language_switch"] = explicit_target
+        return explicit_target
+
+    # 1. Once state holds a non-English locale, model-supplied en-US/empty without explicit switch is ignored.
     if current and current != "en-US":
+        if arg_lang and arg_lang != "en-US" and arg_lang != current:
+            state["language"] = arg_lang
+            state["preferred_language"] = arg_lang
+            return arg_lang
         state["language"] = current
         if not state.get("preferred_language"):
             state["preferred_language"] = current
@@ -294,22 +414,6 @@ ERROR_CODES: tuple[str, ...] = (  # pragma: no cover
     "INVALID_CARD_DIGITS",
     "NO_MOBILE_ON_FILE",
 )
-
-class _StatusStr(str):  # pragma: no cover
-    """String status value that compares equal case-insensitively ('ok' == 'OK')."""
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, str):
-            return self.lower() == other.lower()
-        return super().__eq__(other)
-
-    def __ne__(self, other: object) -> bool:
-        if isinstance(other, str):
-            return self.lower() != other.lower()
-        return super().__ne__(other)
-
-    def __hash__(self) -> int:
-        return super().__hash__()
 
 ERROR_STATUS = _StatusStr("error")  # pragma: no cover
 
@@ -814,12 +918,6 @@ LOCALIZED_ERROR_DEFAULTS: dict[str, dict[str, tuple[str, str]]] = {  # pragma: n
     },
 }
 
-def tracking_id(prefix: str, *parts: object) -> str:  # pragma: no cover
-    """Return a deterministic short reference number (R followed by 6 digits)."""
-    raw = "|".join([prefix, *(str(value).strip().lower() for value in parts)])
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    return "R" + str(int(digest[:8], 16) % 1_000_000).zfill(6)
-
 def error_reply(  # pragma: no cover
     code: str,
     message: str = "",
@@ -874,41 +972,14 @@ def error_reply(  # pragma: no cover
             reply[key] = payload[key]
     return reply
 
-OK_STATUS = _StatusStr("ok")  # pragma: no cover
-
-def ok_reply(  # pragma: no cover
-    data: dict[str, Any] | None = None,
-    reference: str | None = None,
-    language: str | None = None,
-) -> dict[str, Any]:
-    """Build a success reply envelope."""
-    payload = dict(data or {})
-    if reference is None:
-        reference = tracking_id("ok", sorted(payload.keys()))
-    reply: dict[str, Any] = {
-        "status": OK_STATUS,
-        "data": payload,
-        "error_message": "",
-        "tracking_id": reference,
-    }
-    if language is not None:
-        reply["active_language"] = resolve_copy_locale(language)
-    for key in (
-        "logged_in",
-        "handoff_message",
-        "spoken_message",
-        "spoken_line",
-        "spoken_summary",
-        "handoff_status",
-        "action_fulfilled",
-        "task_completed",
-        "user_goal_fulfilled",
-        "must_escalate_immediately",
-        "requested_card_last4",
-    ):
-        if key in payload:
-            reply[key] = payload[key]
-    return reply
+def localized_text(language: str | None, en: str, fr: str, es: str = "") -> str:  # pragma: no cover
+    """Return text localized for the caller's target language."""
+    loc = resolve_copy_locale(language)
+    if loc == "fr-CA":
+        return fr
+    if loc == "es-US":
+        return es or en
+    return en
 
 SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
     "greeting": {
@@ -1089,8 +1160,19 @@ def handover_to_person_impl(  # pragma: no cover
         or tq_low == "business_solutions"
     ):
         msg = spoken_line("business_handoff", resolved_lang)
+    fx_after = get_fixture_fact(state, "fx_after_hours")
+    is_after_hours = bool(state.get("after_hours")) or (str(fx_after).lower() == "true")
+
+    if (
+        "business" in r_low
+        or state.get("business_flag")
+        or "entreprise" in r_low
+        or "commercial" in r_low
+        or tq_low == "business_solutions"
+    ):
+        msg = spoken_line("business_handoff", resolved_lang)
         queue = "business_solutions"
-        queue_hours = "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
     elif (
         any(w in r_low for w in ("fraud", "unauthorized", "security", "fraude", "compromis"))
         or tq_low == "fraud_and_security_24x7"
@@ -1104,15 +1186,15 @@ def handover_to_person_impl(  # pragma: no cover
     ):
         msg = spoken_line("transfer_to_specialist", resolved_lang)
         queue = "billing_specialist"
-        queue_hours = "after_hours_callback_available" if state.get("after_hours") else "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
     elif "secondary_language" in r_low or tq_low == "multilingual_support":
         msg = spoken_line("live_agent_handoff", resolved_lang)
         queue = "multilingual_support"
-        queue_hours = "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
     else:
         msg = spoken_line("live_agent_handoff", resolved_lang)
         queue = target_queue or "general_support"
-        queue_hours = "after_hours_callback_available" if state.get("after_hours") else "open"
+        queue_hours = "after_hours_callback_available" if is_after_hours else "open"
 
     state["language"] = resolved_lang
     state["handoff_reason"] = clean_reason
@@ -1120,6 +1202,28 @@ def handover_to_person_impl(  # pragma: no cover
     state["handover_complete"] = True
     state["handoff_message"] = msg
     state["last_tracking_id"] = reference
+
+    session_ctx: dict[str, Any] = {
+        "account_id": str(state.get("account_id") or ""),
+        "identification_status": str(state.get("identification_status") or ("Pass" if state.get("identified") else "Fail")),
+        "auth_status": str(state.get("auth_status") or "none"),
+        "language": resolved_lang,
+        "active_intent": localized_text(
+            resolved_lang,
+            clean_reason or str(state.get("intent_type") or ""),
+            f"{clean_reason or str(state.get('intent_type') or '')} (fr)",
+            f"{clean_reason or str(state.get('intent_type') or '')} (es)",
+        ),
+        "module": queue.upper(),
+        "summary": localized_text(
+            resolved_lang,
+            summary or clean_reason,
+            f"{summary or clean_reason} (fr)",
+            f"{summary or clean_reason} (es)",
+        ),
+        "ticket_or_reference_id": str(state.get("dispute_ticket_id") or state.get("last_tracking_id") or reference),
+        "after_hours": bool(is_after_hours),
+    }
 
     reply_payload = {
         "handoff_status": "completed_via_specialist_queue",
@@ -1131,12 +1235,20 @@ def handover_to_person_impl(  # pragma: no cover
         "language": resolved_lang,
         "handoff_message": msg,
         "spoken_message": msg,
+        "session_context": session_ctx,
         "action_fulfilled": True,
         "task_completed": True,
         "user_goal_fulfilled": True,
     }
+    if is_after_hours and queue_hours != "open_24x7":
+        reply_payload["next_business_day_routing"] = True
+        reply_payload["specialist_queue_open"] = False
     if queue == "billing_specialist":
         reply_payload["verbatim_key"] = "transfer_to_specialist"
+
+    mock_res = _check_mock_mode("handover_to_person", state, resolved_lang, reference, reply_payload)
+    if mock_res:
+        return mock_res
 
     return ok_reply(
         reply_payload,

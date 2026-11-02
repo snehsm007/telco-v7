@@ -110,23 +110,11 @@ def test_lookup_account_by_full_name_found(monkeypatch) -> None:
 def test_lookup_account_by_full_name_unknown_synthesis(monkeypatch) -> None:
     session = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session, raising=False)
+    # Unmatched name returns NOT_FOUND per Defect 5 remediation
     reply = tool.lookup_account(full_name="Marcus Thorne")
-    assert reply["status"] == "ok"
-    assert reply["data"]["account_id"] == "A1001"
-    assert reply["data"]["first_name"] == "Marcus"
-    assert session.state["account_id"] == "A1001"
-    assert session.state["contact_email"] == "marcus@example.com"
-    assert session.state["phone_last4"] == ""
-    assert session.state["caller_provided_phone_last4"] == ""
-    assert reply["data"]["phone_last4"] == ""
-    assert reply["data"]["linked_mobile_last4"] == ""
-    assert reply["data"]["caller_provided_phone_last4"] == ""
-    assert session.state["current_balance"] == "85.50"
-    assert session.state["past_due_balance"] == "85.50"
-    assert session.state["card_last4"] == "7742"
-    assert session.state["bank_last4"] == "6789"
-    assert "agent_action" in reply["data"]
-    assert session.state["identified"] is True
+    assert reply["status"] == "error"
+    assert reply["error"] == "NOT_FOUND"
+    assert session.state.get("identified") is False
 
 
 def test_lookup_account_by_name_with_caller_phone(monkeypatch) -> None:
@@ -142,11 +130,15 @@ def test_lookup_account_by_name_with_caller_phone(monkeypatch) -> None:
 def test_lookup_account_by_name_with_email(monkeypatch) -> None:
     session = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session, raising=False)
+    # Unrecognized name returns NOT_FOUND (Defect 5)
     reply = tool.lookup_account(full_name="Marcus Thorne", email="marcus@example.com")
-    assert reply["status"] == "ok"
-    assert reply["data"].get("email") == "marcus@example.com"
-    assert session.state["contact_email"] == "marcus@example.com"
-    assert session.state["phone_last4"] == ""
+    assert reply["status"] == "error"
+    assert reply["error"] == "NOT_FOUND"
+
+    # Known name with email succeeds
+    reply_known = tool.lookup_account(full_name="Jordan", email="jordan@example.com")
+    assert reply_known["status"] == "ok"
+    assert reply_known["data"]["first_name"] == "Jordan"
 
 
 def test_lookup_account_nine_digit_ban_has_no_invented_phone(monkeypatch) -> None:
@@ -164,10 +156,16 @@ def test_lookup_account_nine_digit_ban_has_no_invented_phone(monkeypatch) -> Non
 def test_lookup_account_by_full_name_and_postal_code(monkeypatch) -> None:
     session = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session, raising=False)
+    # Unrecognized name returns NOT_FOUND (Defect 5)
     reply = tool.lookup_account(full_name="Marcus Thorne", postal_code="H3Z 2Y7")
-    assert reply["status"] == "ok"
+    assert reply["status"] == "error"
+    assert reply["error"] == "NOT_FOUND"
+
+    # Known name with postal code succeeds and surfaces regional alert
+    reply_known = tool.lookup_account(full_name="Jordan", postal_code="H3Z 2Y7")
+    assert reply_known["status"] == "ok"
     assert session.state["postal_code"] == "H3Z 2Y7"
-    assert reply["data"]["regional_alert"] != ""
+    assert reply_known["data"]["regional_alert"] != ""
 
 
 def test_lookup_account_digits_only_behaves_as_before(monkeypatch) -> None:
@@ -191,17 +189,26 @@ def test_lookup_account_impl_direct_name() -> None:
     assert state["account_id"] == "ACC-1002"
     assert state["lookup_by_name"] is True
 
+    # Known first name Jordan resolves to A1001
+    state_known: dict = {}
+    reply_known = lookup_account_impl(full_name="Jordan", state=state_known)
+    assert reply_known["status"] == "ok"
+    assert state_known["account_id"] == "A1001"
+    assert state_known["lookup_by_name"] is True
+
+    # Unrecognized name Marcus Thorne must return NOT_FOUND (Defect 5 remediation)
     state2: dict = {}
     reply2 = lookup_account_impl(full_name="Marcus Thorne", state=state2)
-    assert reply2["status"] == "ok"
-    assert state2["account_id"] == "A1001"
-    assert state2["lookup_by_name"] is True
+    assert reply2["status"] == "error"
+    assert reply2["error"] == "NOT_FOUND"
+    assert state2.get("identified") is False
 
-    # Identifier as name
+    # Identifier as known name
     state3: dict = {}
-    reply3 = lookup_account_impl(identifier="Marcus Chen", state=state3)
+    reply3 = lookup_account_impl(identifier="Jordan", state=state3)
     assert reply3["status"] == "ok"
     assert state3["lookup_by_name"] is True
+    assert state3["account_id"] == "A1001"
 
     # Identifier as phone
     state4: dict = {}

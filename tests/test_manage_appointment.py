@@ -108,7 +108,7 @@ def test_manage_appointment_reschedule_dynamic_dates(monkeypatch) -> None:
     assert res_slot3["data"]["scheduled_date"] == (today + timedelta(days=3)).isoformat()
 
     res_fallback = tool.manage_appointment(action="reschedule", selected_slot="", language="en-US")
-    assert res_fallback["status"] == "ok"
-    assert res_fallback["data"]["slot_id"] == "SLOT-1"
-    assert res_fallback["data"]["scheduled_date"] == (today + timedelta(days=2)).isoformat()
+    assert res_fallback["status"] == "error"
+    assert res_fallback["data"]["appointment_rescheduled"] is False
+    assert "available_slots" in res_fallback["data"]
 

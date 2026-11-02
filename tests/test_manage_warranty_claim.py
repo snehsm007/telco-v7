@@ -4,15 +4,22 @@ import cxas_app.tools.manage_warranty_claim.python_function.python_code as tool
 
 
 def test_manage_warranty_claim_swollen_battery_safety_override(monkeypatch) -> None:
-    # Swollen battery hazard bypasses authentication entirely
+    # Swollen battery hazard gives immediate safety advice, requires auth for claim (Defect 9)
     session = SimpleNamespace(state={"auth_status": "none"})
     monkeypatch.setattr(tool, "context", session, raising=False)
     res = tool.manage_warranty_claim(issue_description="The battery is swollen and bulging")
     assert res["status"] == "ok"
     assert res["data"]["safety_hazard"] is True
-    assert res["data"]["claim_status"] == "urgent_safety_replacement"
+    assert res["data"]["claim_status"] == "pending_authentication"
+    assert res["data"]["requires_authentication"] is True
     assert "battery" in res["data"]["urgent_safety_instructions"].lower()
-    assert session.state["warranty_claim_id"] == res["data"]["warranty_claim_id"]
+
+    # Once authenticated, replacement claim is filed
+    session.state["auth_status"] = "pass"
+    res_auth = tool.manage_warranty_claim(issue_description="The battery is swollen and bulging")
+    assert res_auth["status"] == "ok"
+    assert res_auth["data"]["claim_status"] == "urgent_safety_replacement"
+    assert session.state["warranty_claim_id"] == res_auth["data"]["warranty_claim_id"]
 
 
 def test_manage_warranty_claim_swollen_battery_french_localization(monkeypatch) -> None:

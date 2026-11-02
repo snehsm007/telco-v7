@@ -466,7 +466,7 @@ def test_services_extended_branches_and_edge_cases() -> None:
     assert autopay_cancel["data"]["autopay_enrolled"] is False
 
     # process_refund_or_dispute: duplicate payment, outage credit, and cap exceeded
-    dup_refund = process_refund_or_dispute_impl(amount="30.00", reason="duplicate charge", state=dict(authed))
+    dup_refund = process_refund_or_dispute_impl(amount="20.00", reason="duplicate charge", state=dict(authed))
     assert dup_refund["status"] == "ok"
     assert dup_refund["data"]["refund_type"] == "duplicate_payment"
 

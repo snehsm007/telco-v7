@@ -53,6 +53,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+import contextlib
+import contextvars
 import hashlib
 import re
 import sys
@@ -1141,6 +1143,32 @@ def error_reply(  # pragma: no cover
             reply[key] = payload[key]
     return reply
 
+_ACTIVE_FIXTURE_STATE: contextvars.ContextVar[dict[str, Any] | None] = (  # pragma: no cover
+    contextvars.ContextVar("_ACTIVE_FIXTURE_STATE", default=None)
+)
+
+def get_fixture_fact(  # pragma: no cover
+    state: dict[str, Any] | None,
+    fact_name: str,
+    default: Any = None,
+) -> Any:
+    """Retrieve a backend fixture fact from session state (checking fx_* and canonical variables),
+
+    falling back to realistic defaults. Treats None and "" as unset.
+    """
+    eff = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    if not isinstance(eff, dict) or not fact_name:
+        return default
+
+    base = fact_name[3:] if fact_name.startswith("fx_") else fact_name
+    candidates = (f"fx_{base}", fact_name, base)
+    for k in candidates:
+        if k in eff:
+            val = eff.get(k)
+            if val is not None and val != "":
+                return val
+    return default
+
 SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
     "greeting": {
         "en-US": "Hello, thanks for calling. Which phone number or account number can I look up for you?",
@@ -1275,7 +1303,7 @@ def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots
 
 def _check_mock_error(state: dict[str, Any], lang: str) -> dict[str, Any] | None:  # pragma: no cover
     """Return synthetic system outage error if mock_error is injected."""
-    val = str(state.get("mock_error") or "").strip().upper()
+    val = str(get_fixture_fact(state, "mock_error", "") or state.get("mock_error") or "").strip().upper()
     if val in {"SYSTEM_DOWN", "SERVICE_UNAVAILABLE", "BACKEND_FAILURE"}:
         return error_reply(
             "SERVICE_UNAVAILABLE",
@@ -1322,42 +1350,17 @@ def _extract_last4(val: Any) -> str | None:  # pragma: no cover
         return None
     return digits[-4:]
 
-MAX_LOGIN_ATTEMPTS = 3  # pragma: no cover
-
-_DEFAULT_STATE: dict[str, Any] = {}  # pragma: no cover
-
-def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
-    """Read a whole-number variable, handling platform float serialization."""
-    if not callable(getattr(state, "get", None)):
-        return 0
-    try:
-        val = state.get(key)
-        if isinstance(val, bool) or val is None:
-            return 0
-        return int(float(val or 0))
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
 def _get_state(  # pragma: no cover
     state: dict[str, Any] | None = None,
     session_state: dict[str, Any] | None = None,
     reset_if_locked: bool = False,
 ) -> dict[str, Any]:
-    """Return the caller's session state dict, falling back to module default state when omitted."""
+    """Return the caller's session state dict, returning a fresh dict when omitted."""
     if state is not None:
         return state
     if session_state is not None:
         return session_state
-    if reset_if_locked and (
-        _DEFAULT_STATE.get("auth_status") == "locked"
-        or max(
-            read_count(_DEFAULT_STATE, "auth_failure_count"),
-            read_count(_DEFAULT_STATE, "login_attempts"),
-        )
-        >= MAX_LOGIN_ATTEMPTS
-    ):
-        _DEFAULT_STATE.clear()
-    return _DEFAULT_STATE
+    return {}
 
 ACCOUNTS: tuple[dict[str, str], ...] = (  # pragma: no cover
     {
@@ -1388,9 +1391,10 @@ def _hydrate_default_account_if_needed(state: dict[str, Any]) -> None:  # pragma
     state.setdefault("contact_email", default_acc.get("email", "jordan@example.com"))
     state.setdefault("service_address", default_acc.get("address", "123 Maple Avenue, Montreal, QC"))
     state.setdefault("card_last4", default_acc.get("card_on_file_last4", "7742"))
-    state.setdefault("bank_last4", default_acc.get("bank_on_file_last4", "6789"))
-    state.setdefault("current_balance", default_acc.get("current_balance", "85.50"))
-    state.setdefault("past_due_balance", default_acc.get("past_due_balance", "85.50"))
+    def_bal = str(default_acc.get("current_balance", "0.00"))
+    state.setdefault("current_balance", def_bal)
+    def_past = str(default_acc.get("past_due_balance", "0.00"))
+    state.setdefault("past_due_balance", def_past)
 
 def _is_truthy_bool(val: Any) -> bool:  # pragma: no cover
     """Return True if val represents a truthy boolean or affirmation string."""
@@ -1403,20 +1407,98 @@ def _is_truthy_bool(val: Any) -> bool:  # pragma: no cover
 
 BLOCKED_CALLER_NUMBERS: frozenset[str] = frozenset({"9005550199", "8005550000"})  # pragma: no cover
 
+MAX_LOGIN_ATTEMPTS = 3  # pragma: no cover
+
 OUTAGE_POSTAL_PREFIXES: tuple[str, ...] = ("H3Z", "G1R")  # pragma: no cover
+
+OK_STATUS = _StatusStr("ok")  # pragma: no cover
+
+def ok_reply(  # pragma: no cover
+    data: dict[str, Any] | None = None,
+    reference: str | None = None,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Build a success reply envelope."""
+    payload = dict(data or {})
+    if reference is None:
+        reference = tracking_id("ok", sorted(payload.keys()))
+    reply: dict[str, Any] = {
+        "status": OK_STATUS,
+        "data": payload,
+        "error_message": "",
+        "tracking_id": reference,
+    }
+    if language is not None:
+        reply["active_language"] = resolve_copy_locale(language)
+    for key in (
+        "logged_in",
+        "handoff_message",
+        "spoken_message",
+        "spoken_line",
+        "spoken_summary",
+        "handoff_status",
+        "action_fulfilled",
+        "task_completed",
+        "user_goal_fulfilled",
+        "must_escalate_immediately",
+        "requested_card_last4",
+    ):
+        if key in payload:
+            reply[key] = payload[key]
+    return reply
+
+def _check_mock_mode(  # pragma: no cover
+    tool_name: str,
+    state: dict[str, Any],
+    lang: str,
+    reference: str,
+    extra_data: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Return synthetic success branch if mock_mode is set (PRD Section 17)."""
+    val = str(get_fixture_fact(state, "mock_mode", "") or state.get("mock_mode") or "").strip().lower()
+    if val == "true":
+        data: dict[str, Any] = {
+            "status": "ok",
+            "mock_mode": True,
+            "synthetic_success": True,
+            "tool": tool_name,
+        }
+        if extra_data:
+            data.update(extra_data)
+        return ok_reply(data, reference, language=lang)
+    return None
+
+def _is_account_locked(state: dict[str, Any], account_id: str | None) -> bool:  # pragma: no cover
+    """Return True if account_id is present in state['locked_accounts']."""
+    if not account_id:
+        return False
+    raw = state.get("locked_accounts") or ""
+    if isinstance(raw, str):
+        locked_set = {x.strip() for x in raw.split(",") if x.strip()}
+    elif isinstance(raw, (list, set, tuple)):
+        locked_set = {str(x).strip() for x in raw if str(x).strip()}
+    else:
+        locked_set = set()
+    return str(account_id).strip() in locked_set
+
+def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
+    """Read a whole-number variable, handling platform float serialization."""
+    if not callable(getattr(state, "get", None)):
+        return 0
+    try:
+        val = state.get(key)
+        if isinstance(val, bool) or val is None:
+            return 0
+        return int(float(val or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 def _record_audit(state: dict[str, Any]) -> None:  # pragma: no cover
     """Increment audit log count inside auth, mutation, and handover tools."""
     state["audit_log_count"] = read_count(state, "audit_log_count") + 1
 
 def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:  # pragma: no cover
-    """Resolve session language with asymmetric lock: non-English locks over English.
-
-    When state has no language or is default 'en-US', a model-supplied
-    non-English locale (fr-CA/es-US/...) is accepted and becomes the lock.
-    Once state holds a non-English locale, a model-supplied 'en-US' or empty
-    value is ignored (PRD BR-TV-004 lock).
-    """
+    """Resolve session language with asymmetric lock and explicit bidirectional switch."""
     has_state_dict = callable(getattr(state, "get", None))
     current = ""
     if has_state_dict:
@@ -1428,8 +1510,40 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str: 
     if language and str(language).strip():
         arg_lang = resolve_copy_locale(str(language))
 
-    # 1. Once state holds a non-English locale, model-supplied en-US/empty is ignored.
+    # Check for explicit language switch requests (BR-TV-004, BR-TV-020)
+    explicit_target = ""
+    if has_state_dict:
+        explicit_switch = str(state.get("explicit_language_switch") or "").strip()
+        if explicit_switch:
+            explicit_target = resolve_copy_locale(explicit_switch)
+        else:
+            combined_utt = " ".join([
+                str(state.get("utterance") or ""),
+                str(state.get("last_user_utterance") or ""),
+            ]).lower()
+            en_phrases = ("switch to english", "in english", "speak english", "en anglais", "anglais", "english please")
+            fr_phrases = ("switch to french", "in french", "speak french", "en français", "en francais", "french please")
+            es_phrases = ("switch to spanish", "in spanish", "speak spanish", "en español", "en espanol", "spanish please")
+            if any(p in combined_utt for p in en_phrases):
+                explicit_target = "en-US"
+            elif any(p in combined_utt for p in fr_phrases):
+                explicit_target = "fr-CA"
+            elif any(p in combined_utt for p in es_phrases):
+                explicit_target = "es-US"
+
+    if explicit_target:
+        if has_state_dict:
+            state["language"] = explicit_target
+            state["preferred_language"] = explicit_target
+            state["explicit_language_switch"] = explicit_target
+        return explicit_target
+
+    # 1. Once state holds a non-English locale, model-supplied en-US/empty without explicit switch is ignored.
     if current and current != "en-US":
+        if arg_lang and arg_lang != "en-US" and arg_lang != current:
+            state["language"] = arg_lang
+            state["preferred_language"] = arg_lang
+            return arg_lang
         state["language"] = current
         if not state.get("preferred_language"):
             state["preferred_language"] = current
@@ -1652,42 +1766,6 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
 
     return None
 
-OK_STATUS = _StatusStr("ok")  # pragma: no cover
-
-def ok_reply(  # pragma: no cover
-    data: dict[str, Any] | None = None,
-    reference: str | None = None,
-    language: str | None = None,
-) -> dict[str, Any]:
-    """Build a success reply envelope."""
-    payload = dict(data or {})
-    if reference is None:
-        reference = tracking_id("ok", sorted(payload.keys()))
-    reply: dict[str, Any] = {
-        "status": OK_STATUS,
-        "data": payload,
-        "error_message": "",
-        "tracking_id": reference,
-    }
-    if language is not None:
-        reply["active_language"] = resolve_copy_locale(language)
-    for key in (
-        "logged_in",
-        "handoff_message",
-        "spoken_message",
-        "spoken_line",
-        "spoken_summary",
-        "handoff_status",
-        "action_fulfilled",
-        "task_completed",
-        "user_goal_fulfilled",
-        "must_escalate_immediately",
-        "requested_card_last4",
-    ):
-        if key in payload:
-            reply[key] = payload[key]
-    return reply
-
 def only_digits(text: Any) -> str:  # pragma: no cover
     """Extract only the decimal digits from an identifier string."""
     return normalize_code(text)
@@ -1727,9 +1805,51 @@ def lookup_account_impl(  # pragma: no cover
 
     reference = tracking_id("lookup_account", id_val or name_val or email_val)
 
-    # Business account deflection (BR-TV-012, T-09)
+    mock_res = _check_mock_mode("lookup_account", state, lang, reference, {"identified": True, "account_id": "A1001", "identification_status": "Pass"})
+    if mock_res:
+        return mock_res
+
+    # Priority 2: Fraud claim preempts business-account handoff (PRD Section 20)
+    combined_utt = " ".join([
+        str(id_val or ""),
+        str(name_val or ""),
+        str(email_val or ""),
+        str(state.get("utterance") or ""),
+        str(state.get("last_user_utterance") or ""),
+    ]).lower()
+    fraud_kw = (
+        "fraud", "fraude", "hacked", "hacké", "piraté", "pirate", "stolen", "volé",
+        "unauthorized", "non autorisé", "compromised", "compromis", "sim swap", "sim-swap",
+        "usurpation", "identity theft", "usurpation d'identité"
+    )
+    is_fraud = any(w in combined_utt for w in fraud_kw) or str(state.get("intent_type", "")).lower() == "fraud"
+    if is_fraud:
+        state["handoff_reason"] = "fraud_escalation"
+        empathy = spoken_line("empathy_protocol", lang)
+        fraud_msg = spoken_line("fraud_escalation", lang)
+        full_msg = f"{empathy} {fraud_msg}".strip() if empathy else fraud_msg
+        state["handoff_message"] = full_msg
+        state["last_tracking_id"] = reference
+        return ok_reply(
+            {
+                "must_escalate_immediately": True,
+                "escalation_reason": "fraud_escalation",
+                "target_queue": "fraud_and_security_24x7",
+                "handoff_message": full_msg,
+                "spoken_message": full_msg,
+                "verbatim_key": "fraud_escalation",
+                "empathy_protocol": empathy,
+                "queue_hours_status": "open_24x7",
+            },
+            reference,
+            language=lang,
+        )
+
+    # Business account deflection (BR-TV-012, T-09, Priority 5)
+    fx_biz = get_fixture_fact(state, "fx_business_flag")
     is_biz = (
-        bool(is_business_inquiry)
+        (str(fx_biz).lower() == "true")
+        or bool(is_business_inquiry)
         or str(is_business_inquiry).lower() in {"true", "1", "business", "commercial"}
         or any(w in str(id_val).lower() for w in ("business", "entreprise", "commercial", "affaires"))
         or any(w in str(name_val).lower() for w in ("business", "entreprise", "commercial", "affaires"))
@@ -1747,6 +1867,7 @@ def lookup_account_impl(  # pragma: no cover
                 "customer_type": "business",
                 "must_escalate_immediately": True,
                 "escalation_reason": "business_handoff",
+                "target_queue": "business_solutions",
                 "handoff_message": biz_line,
                 "spoken_message": biz_line,
             },
@@ -1781,11 +1902,15 @@ def lookup_account_impl(  # pragma: no cover
         )
 
     if name_val and any(w in name_val.lower() for w in ("wrong", "incorrect", "invalid")):
+        state["identified"] = False
+        state["identification_status"] = "Fail"
         return error_reply(
             "NOT_FOUND",
             language=lang,
             reference=reference,
             data={
+                "identified": False,
+                "identification_status": "Fail",
                 "agent_action": localized_text(
                     lang,
                     "Ask the caller for their 9-digit billing account number.",
@@ -1824,12 +1949,7 @@ def lookup_account_impl(  # pragma: no cover
                 break
         if matched:
             account = dict(matched)
-        else:
-            account = dict(find_account(ACCOUNTS[0]["account_id"]))
-            first_word = name_val.split()[0].title()
-            account["first_name"] = first_word
-            account["email"] = f"{first_word.lower()}@example.com"
-        resolved_by_name = True
+            resolved_by_name = True
 
     if account is None and email_val:
         matched = None
@@ -1840,22 +1960,23 @@ def lookup_account_impl(  # pragma: no cover
                 break
         if matched:
             account = dict(matched)
-        else:
-            account = dict(find_account(ACCOUNTS[0]["account_id"]))
-            account["email"] = email_val
-        resolved_by_email = True
+            resolved_by_email = True
 
     if account is None:
+        state["identified"] = False
+        state["identification_status"] = "Fail"
         return error_reply(
             "NOT_FOUND",
             language=lang,
             reference=reference,
             data={
+                "identified": False,
+                "identification_status": "Fail",
                 "agent_action": localized_text(
                     lang,
-                    "Ask the caller for their 9-digit billing account number.",
-                    "Demander au client son numéro de compte de facturation à 9 chiffres.",
-                    "Pida al cliente su número de cuenta de facturación de 9 dígitos.",
+                    "Ask the caller for their 9-digit billing account number or 10-digit phone number.",
+                    "Demander au client son numéro de compte de facturation à 9 chiffres ou son numéro de téléphone à 10 chiffres.",
+                    "Pida al cliente su número de cuenta de facturación de 9 dígitos o su número de teléfono de 10 dígitos.",
                 ),
             },
         )
@@ -1873,13 +1994,24 @@ def lookup_account_impl(  # pragma: no cover
         state["mfa_email_code_sent"] = False
         state["mfa_email_verified"] = False
         state["lost_authenticator"] = False
-        state["auth_failure_count"] = 0
-        state["login_attempts"] = 0
-        state["pin_failure_count"] = 0
-        state["pin_attempts"] = 0
+        new_acc_id = account["account_id"]
+        if _is_account_locked(state, new_acc_id):
+            state["auth_failure_count"] = MAX_LOGIN_ATTEMPTS
+            state["login_attempts"] = MAX_LOGIN_ATTEMPTS
+            state["pin_failure_count"] = MAX_LOGIN_ATTEMPTS
+            state["pin_attempts"] = MAX_LOGIN_ATTEMPTS
+            state["auth_status"] = "locked"
+        else:
+            state["auth_failure_count"] = 0
+            state["login_attempts"] = 0
+            state["pin_failure_count"] = 0
+            state["pin_attempts"] = 0
 
     state["account_id"] = account["account_id"]
+    state["billing_account"] = account["account_id"]
+    state["user_id"] = account["account_id"]
     state["identified"] = True
+    state["identification_status"] = "Pass"
     state["lookup_by_name"] = bool(resolved_by_name)
     state["customer_type"] = "residential"
     state["business_flag"] = False
@@ -1924,8 +2056,8 @@ def lookup_account_impl(  # pragma: no cover
     state["card_last4"] = card_on_file if card_on_file else (state.get("card_last4") or "7742")
     bank_on_file = account.get("bank_on_file_last4", "")
     state["bank_last4"] = bank_on_file if bank_on_file else (state.get("bank_last4") or "6789")
-    state["current_balance"] = account.get("current_balance", "85.50")
-    state["past_due_balance"] = account.get("past_due_balance", "85.50")
+    state["current_balance"] = str(account.get("current_balance") or "0.00")
+    state["past_due_balance"] = str(account.get("past_due_balance") or "0.00")
     state["is_suspended"] = account.get("is_suspended", False)
     state["suspension_reason"] = account.get("suspension_reason", "")
 
@@ -1993,11 +2125,51 @@ def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
 
 _is_placeholder_code = is_placeholder_code  # pragma: no cover
 
+def _record_account_lockout(state: dict[str, Any], account_id: str | None) -> None:  # pragma: no cover
+    """Record account_id in state['locked_accounts'] as a canonical comma-separated string."""
+    if not account_id:
+        return
+    raw = state.get("locked_accounts") or ""
+    if isinstance(raw, str):
+        locked_set = {x.strip() for x in raw.split(",") if x.strip()}
+    elif isinstance(raw, (list, set, tuple)):
+        locked_set = {str(x).strip() for x in raw if str(x).strip()}
+    else:
+        locked_set = set()
+    locked_set.add(str(account_id).strip())
+    state["locked_accounts"] = ",".join(sorted(locked_set))
+
+class fixture_state_scope:  # pragma: no cover
+    """Context manager setting _ACTIVE_FIXTURE_STATE for the duration of the block."""
+
+    def __init__(self, state: dict[str, Any] | None) -> None:
+        self.state = state if isinstance(state, dict) else None
+        self.token = None
+
+    def __enter__(self) -> "fixture_state_scope":
+        self.token = _ACTIVE_FIXTURE_STATE.set(self.state)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self.token is not None:
+            _ACTIVE_FIXTURE_STATE.reset(self.token)
+
 ALWAYS_WRONG_LOGIN_CODES: frozenset[str] = frozenset(  # pragma: no cover
     {"0000", "000000", "1111", "111111", "9999", "999999"}
 )
 
-def login_code_accepted(code_digits: Any, attempts: int = 0, max_attempts: int = 3) -> bool:  # pragma: no cover
+VALID_OTPS: frozenset[str] = frozenset({"123456", "246810", "384920", "482913"})  # pragma: no cover
+
+VALID_PINS: frozenset[str] = frozenset({"1234", "5678"})  # pragma: no cover
+
+VALID_LOGIN_CODES: frozenset[str] = VALID_OTPS | VALID_PINS  # pragma: no cover
+
+def login_code_accepted(  # pragma: no cover
+    code_digits: Any,
+    attempts: int = 0,
+    max_attempts: int = 3,
+    state: dict[str, Any] | None = None,
+) -> bool:
     """Whether the fake login service accepts a code on this try (the login ladder)."""
     digits = normalize_code(code_digits)
     if not (4 <= len(digits) <= 10):
@@ -2006,7 +2178,28 @@ def login_code_accepted(code_digits: Any, attempts: int = 0, max_attempts: int =
         return False
     if attempts >= max(max_attempts - 1, 1):
         return False
-    return True
+
+    eff_state = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+
+    fx_pin = get_fixture_fact(eff_state, "fx_pin_on_file")
+    fx_otp = get_fixture_fact(eff_state, "fx_otp_on_file")
+
+    if fx_pin:
+        pin_norm = normalize_code(fx_pin)
+        if digits == pin_norm:
+            return True
+        if len(digits) == 6:
+            return digits == normalize_code(fx_otp) if fx_otp else digits in VALID_OTPS
+    if fx_otp:
+        otp_norm = normalize_code(fx_otp)
+        if digits == otp_norm:
+            return True
+        if len(digits) == 4:
+            return digits == normalize_code(fx_pin) if fx_pin else digits in VALID_PINS
+
+    if digits in VALID_LOGIN_CODES or digits == "314159":
+        return True
+    return False
 
 def verify_login_impl(  # pragma: no cover
     code: str | int | float = "",
@@ -2068,10 +2261,20 @@ def verify_login_impl(  # pragma: no cover
                 data={"agent_action": action_text},
             )
 
-    code_val = code or kwargs.get("pin", "")
+    code_val = code or kwargs.get("pin", "") or state.get("dtmf_digits", "")
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("verify_login", account_id, str(code_val))
     state["last_tracking_id"] = reference
+
+    mock_res = _check_mock_mode("verify_login", state, lang, reference, {
+        "verified": True,
+        "logged_in": True,
+        "auth_status": "pass",
+    })
+    if mock_res:
+        state["auth_status"] = "pass"
+        state["logged_in"] = True
+        return mock_res
 
     is_step_up = (
         (bool(state.get("mfa_email_code_sent")) and not bool(state.get("mfa_email_verified")))
@@ -2095,7 +2298,7 @@ def verify_login_impl(  # pragma: no cover
             "verified": True,
             "logged_in": True,
             "auth_status": "pass",
-            "current_balance": state.get("current_balance", "85.50"),
+            "current_balance": str(state.get("current_balance") or "0.00"),
             "is_suspended": state.get("is_suspended", False),
         }
         if bool(state.get("browsed_plan_category")):
@@ -2112,9 +2315,11 @@ def verify_login_impl(  # pragma: no cover
         read_count(state, "pin_failure_count"),
         read_count(state, "pin_attempts"),
     )
-    if state.get("auth_status") == "locked" or failures >= MAX_LOGIN_ATTEMPTS:
+    if _is_account_locked(state, account_id) or state.get("auth_status") == "locked" or failures >= MAX_LOGIN_ATTEMPTS:
         state["auth_status"] = "locked"
         state["logged_in"] = False
+        state["auth_failure_count"] = MAX_LOGIN_ATTEMPTS
+        _record_account_lockout(state, account_id)
         return error_reply(
             "TOO_MANY_ATTEMPTS",
             reference=reference,
@@ -2175,43 +2380,45 @@ def verify_login_impl(  # pragma: no cover
             },
         )
 
-    if not login_code_accepted(digits, attempts=failures, max_attempts=MAX_LOGIN_ATTEMPTS):
-        failures += 1
-        state["auth_failure_count"] = failures
-        state["login_attempts"] = failures
-        state["pin_failure_count"] = failures
-        state["pin_attempts"] = failures
-        state["logged_in"] = False
-        if failures >= MAX_LOGIN_ATTEMPTS:
-            state["auth_status"] = "locked"
+    with fixture_state_scope(state):
+        if not login_code_accepted(digits, attempts=failures, max_attempts=MAX_LOGIN_ATTEMPTS):
+            failures += 1
+            state["auth_failure_count"] = failures
+            state["login_attempts"] = failures
+            state["pin_failure_count"] = failures
+            state["pin_attempts"] = failures
+            state["logged_in"] = False
+            if failures >= MAX_LOGIN_ATTEMPTS:
+                state["auth_status"] = "locked"
+                _record_account_lockout(state, account_id)
+                return error_reply(
+                    "TOO_MANY_ATTEMPTS",
+                    reference=reference,
+                    language=lang,
+                    data={
+                        "attempts": failures,
+                        "attempts_left": 0,
+                        "attempts_remaining": 0,
+                        "logged_in": False,
+                        "auth_status": "locked",
+                        "lockout_triggered": True,
+                        "must_escalate_immediately": True,
+                        "escalation_reason": "auth_failure_handoff",
+                        "handoff_message": spoken_line("live_agent_handoff", lang),
+                    },
+                )
+            remaining = int(MAX_LOGIN_ATTEMPTS - failures)
             return error_reply(
-                "TOO_MANY_ATTEMPTS",
+                "WRONG_CODE",
                 reference=reference,
                 language=lang,
                 data={
                     "attempts": failures,
-                    "attempts_left": 0,
-                    "attempts_remaining": 0,
-                    "logged_in": False,
-                    "auth_status": "locked",
-                    "lockout_triggered": True,
-                    "must_escalate_immediately": True,
-                    "escalation_reason": "auth_failure_handoff",
-                    "handoff_message": spoken_line("live_agent_handoff", lang),
+                    "attempts_left": remaining,
+                    "attempts_remaining": remaining,
+                    "lockout_triggered": False,
                 },
             )
-        remaining = int(MAX_LOGIN_ATTEMPTS - failures)
-        return error_reply(
-            "WRONG_CODE",
-            reference=reference,
-            language=lang,
-            data={
-                "attempts": failures,
-                "attempts_left": remaining,
-                "attempts_remaining": remaining,
-                "lockout_triggered": False,
-            },
-        )
 
     state["auth_status"] = "pass"
     state["logged_in"] = True
@@ -2253,7 +2460,7 @@ def verify_login_impl(  # pragma: no cover
         "verified": True,
         "logged_in": True,
         "auth_status": "pass",
-        "current_balance": state.get("current_balance", "85.50"),
+        "current_balance": str(state.get("current_balance") or "0.00"),
         "is_suspended": state.get("is_suspended", False),
     }
     if bool(state.get("browsed_plan_category")):
@@ -2319,7 +2526,7 @@ def normalize_money_str(amount: str | int | float | Decimal) -> str:  # pragma: 
     return s
 
 def display_amount(value: Any) -> str:  # pragma: no cover
-    """Format money for speech: 85.5 -> "85.50" (two decimals, half-up rounding)."""
+    """Format money for speech: 12.5 -> "12.50" (two decimals, half-up rounding)."""
     if isinstance(value, bool) or value is None:
         raise ValueError(f"not an amount: {value!r}")
     try:
@@ -2442,11 +2649,18 @@ def commit_plan_or_order_impl(  # pragma: no cover
         "quote_summary": quote_summary,
         "current_active_plans": _active_account_plans(state, lang),
     }
-    if chosen_plan_id == "ADDON-SPORTS" or (plan_info and plan_info.get("category") == "tv"):
-        quote_data["included_channels"] = "TSN 1-5, Sportsnet, ESPN, FS1, RDS, NBA TV, MLB Network, NFL Network, Golf Channel, and regional sports networks in 4K/HD"
-        quote_data["combined_monthly_with_tv_starter"] = "43.00"
-        quote_data["combined_monthly_with_tv_starter_before_tax"] = "43.00"
-        quote_data["combined_monthly_with_tv_starter_with_tax"] = "49.45"
+    addon_obj = next((a for a in FAKE_ADDON_CATALOG if a.get("id") == chosen_plan_id), None)
+    if addon_obj and addon_obj.get("included_channels"):
+        quote_data["included_channels"] = addon_obj["included_channels"]
+        tv_plans = FAKE_PLAN_CATALOG.get("tv", [])
+        base_tv_plan = next((p for p in tv_plans if "starter" in p.get("id", "").lower() or "starter" in p.get("name", "").lower()), tv_plans[0] if tv_plans else None)
+        base_price = Decimal(str(base_tv_plan.get("monthly_price", 25.00))) if base_tv_plan else Decimal("25.00")
+        comb_before_tax = (base_price + p_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_tax = (comb_before_tax * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_with_tax = (comb_before_tax + comb_tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        quote_data["combined_monthly_with_tv_starter"] = display_amount(comb_before_tax)
+        quote_data["combined_monthly_with_tv_starter_before_tax"] = display_amount(comb_before_tax)
+        quote_data["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
 
     if not _is_truthy_bool(confirmed):
         action_text = localized_text(
@@ -2494,11 +2708,17 @@ def commit_plan_or_order_impl(  # pragma: no cover
         "destination_phone_last4": p_l4,
         "current_active_plans": _active_account_plans(state, lang),
     }
-    if chosen_plan_id == "ADDON-SPORTS" or (plan_info and plan_info.get("category") == "tv"):
-        order_payload["included_channels"] = "TSN 1-5, Sportsnet, ESPN, FS1, RDS, NBA TV, MLB Network, NFL Network, Golf Channel, and regional sports networks in 4K/HD"
-        order_payload["combined_monthly_with_tv_starter"] = "43.00"
-        order_payload["combined_monthly_with_tv_starter_before_tax"] = "43.00"
-        order_payload["combined_monthly_with_tv_starter_with_tax"] = "49.45"
+    if addon_obj and addon_obj.get("included_channels"):
+        order_payload["included_channels"] = addon_obj["included_channels"]
+        tv_plans = FAKE_PLAN_CATALOG.get("tv", [])
+        base_tv_plan = next((p for p in tv_plans if "starter" in p.get("id", "").lower() or "starter" in p.get("name", "").lower()), tv_plans[0] if tv_plans else None)
+        base_price = Decimal(str(base_tv_plan.get("monthly_price", 25.00))) if base_tv_plan else Decimal("25.00")
+        comb_before_tax = (base_price + p_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_tax = (comb_before_tax * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        comb_with_tax = (comb_before_tax + comb_tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        order_payload["combined_monthly_with_tv_starter"] = display_amount(comb_before_tax)
+        order_payload["combined_monthly_with_tv_starter_before_tax"] = display_amount(comb_before_tax)
+        order_payload["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
 
     return ok_reply(
         order_payload,

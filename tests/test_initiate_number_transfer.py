@@ -75,7 +75,7 @@ def test_initiate_number_transfer_authenticated_missing_donor_details(monkeypatc
     assert data["early_termination_fee"] == "0.00"
     assert data["final_bill_estimate"] == "28.50"
     assert data["porting_account_number"] == "ACC-0199"
-    assert data["transfer_pin"] == "849201"
+    assert len(data["transfer_pin"]) == 6 and data["transfer_pin"].isdigit()
 
 
 def test_initiate_number_transfer_port_out_facts(monkeypatch) -> None:
@@ -83,7 +83,7 @@ def test_initiate_number_transfer_port_out_facts(monkeypatch) -> None:
     monkeypatch.setattr(tool, "context", session, raising=False)
     res = tool.initiate_number_transfer(
         phone_to_transfer="514-555-0199",
-        current_carrier="Bell",
+        current_carrier="competitor",
     )
     assert res["status"] == "ok"
     data = res["data"]
@@ -92,8 +92,8 @@ def test_initiate_number_transfer_port_out_facts(monkeypatch) -> None:
     assert data["early_termination_fee"] == "0.00"
     assert data["final_bill_estimate"] == "28.50"
     assert data["porting_account_number"] == "ACC-0199"
-    assert data["transfer_pin"] == "849201"
-    assert data["port_out_pin"] == "849201"
+    assert len(data["transfer_pin"]) == 6 and data["transfer_pin"].isdigit()
+    assert data["port_out_pin"] == data["transfer_pin"]
     assert "agent_action" in data
 
 

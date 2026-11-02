@@ -128,15 +128,23 @@ def test_appointment_two_step_cancel_enforcement() -> None:
 
 
 def test_warranty_swollen_battery_safety_override() -> None:
-    # Swollen battery requires immediate safety guidance without auth
+    # Swollen battery requires immediate safety guidance without auth, but claim requires auth (Defect 9)
     st: dict = {}
     res = manage_warranty_claim_impl(issue_description="device battery swollen", language="en-US", state=st)
     assert res["status"] == "ok"
     assert res["data"]["safety_hazard"] is True
-    assert res["data"]["claim_status"] == "urgent_safety_replacement"
-    assert res["data"]["expedited_replacement_eta"] == "1 business day"
+    assert res["data"]["claim_status"] == "pending_authentication"
+    assert res["data"]["requires_authentication"] is True
     assert res["data"]["do_not_mail_warning"] is True
     assert "do not mail" in res["data"]["urgent_safety_instructions"].lower()
+
+    # Once authenticated, urgent safety replacement claim can be dispatched
+    st["auth_status"] = "pass"
+    res2 = manage_warranty_claim_impl(issue_description="device battery swollen", language="en-US", state=st)
+    assert res2["status"] == "ok"
+    assert res2["data"]["claim_status"] == "urgent_safety_replacement"
+    assert res2["data"]["expedited_replacement_eta"] == "1 business day"
+    assert res2["data"]["do_not_mail_warning"] is True
 
 
 def test_password_reset_unknown_phone_propagates_not_found() -> None:

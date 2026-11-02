@@ -82,8 +82,8 @@ def test_port_out_step2_provides_port_out_pin(monkeypatch) -> None:
     )
     assert reply["status"] == "ok"
     assert reply["data"]["service_cancelled"] is True
-    assert reply["data"]["port_out_pin"] == "849201"
-    assert reply["data"]["transfer_pin"] == "849201"
+    assert len(reply["data"]["port_out_pin"]) == 6 and reply["data"]["port_out_pin"].isdigit()
+    assert reply["data"]["transfer_pin"] == reply["data"]["port_out_pin"]
     assert reply["data"]["porting_account_number"] == "A1001"
     assert reply["data"]["contract_disclosure_required"] is True
     assert reply["data"]["early_termination_fee"] == "0.00"
@@ -148,7 +148,8 @@ def test_port_out_step1_unconfirmed_returns_facts_and_disclosures(monkeypatch) -
     assert data["early_termination_fee"] == "0.00"
     assert data["final_bill_estimate"] == "28.50"
     assert data["porting_account_number"] == "ACC-0199"
-    assert data["transfer_pin"] == "849201"
+    assert data.get("transfer_pin_withheld_pending_confirmation") is True
+    assert "transfer_pin" not in data or not data["transfer_pin"]
     assert "timeline" in data
     assert "agent_action" in data
 

@@ -47,6 +47,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+import contextlib
+import contextvars
 import hashlib
 import re
 import sys
@@ -1133,6 +1135,32 @@ def error_reply(  # pragma: no cover
             reply[key] = payload[key]
     return reply
 
+_ACTIVE_FIXTURE_STATE: contextvars.ContextVar[dict[str, Any] | None] = (  # pragma: no cover
+    contextvars.ContextVar("_ACTIVE_FIXTURE_STATE", default=None)
+)
+
+def get_fixture_fact(  # pragma: no cover
+    state: dict[str, Any] | None,
+    fact_name: str,
+    default: Any = None,
+) -> Any:
+    """Retrieve a backend fixture fact from session state (checking fx_* and canonical variables),
+
+    falling back to realistic defaults. Treats None and "" as unset.
+    """
+    eff = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    if not isinstance(eff, dict) or not fact_name:
+        return default
+
+    base = fact_name[3:] if fact_name.startswith("fx_") else fact_name
+    candidates = (f"fx_{base}", fact_name, base)
+    for k in candidates:
+        if k in eff:
+            val = eff.get(k)
+            if val is not None and val != "":
+                return val
+    return default
+
 SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
     "greeting": {
         "en-US": "Hello, thanks for calling. Which phone number or account number can I look up for you?",
@@ -1267,7 +1295,7 @@ def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots
 
 def _check_mock_error(state: dict[str, Any], lang: str) -> dict[str, Any] | None:  # pragma: no cover
     """Return synthetic system outage error if mock_error is injected."""
-    val = str(state.get("mock_error") or "").strip().upper()
+    val = str(get_fixture_fact(state, "mock_error", "") or state.get("mock_error") or "").strip().upper()
     if val in {"SYSTEM_DOWN", "SERVICE_UNAVAILABLE", "BACKEND_FAILURE"}:
         return error_reply(
             "SERVICE_UNAVAILABLE",
@@ -1288,42 +1316,17 @@ def _ensure_default_profile(state: dict[str, Any]) -> None:  # pragma: no cover
     state.setdefault("pin_failure_count", 0)
     state.setdefault("payment_failure_count", 0)
 
-MAX_LOGIN_ATTEMPTS = 3  # pragma: no cover
-
-_DEFAULT_STATE: dict[str, Any] = {}  # pragma: no cover
-
-def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
-    """Read a whole-number variable, handling platform float serialization."""
-    if not callable(getattr(state, "get", None)):
-        return 0
-    try:
-        val = state.get(key)
-        if isinstance(val, bool) or val is None:
-            return 0
-        return int(float(val or 0))
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
 def _get_state(  # pragma: no cover
     state: dict[str, Any] | None = None,
     session_state: dict[str, Any] | None = None,
     reset_if_locked: bool = False,
 ) -> dict[str, Any]:
-    """Return the caller's session state dict, falling back to module default state when omitted."""
+    """Return the caller's session state dict, returning a fresh dict when omitted."""
     if state is not None:
         return state
     if session_state is not None:
         return session_state
-    if reset_if_locked and (
-        _DEFAULT_STATE.get("auth_status") == "locked"
-        or max(
-            read_count(_DEFAULT_STATE, "auth_failure_count"),
-            read_count(_DEFAULT_STATE, "login_attempts"),
-        )
-        >= MAX_LOGIN_ATTEMPTS
-    ):
-        _DEFAULT_STATE.clear()
-    return _DEFAULT_STATE
+    return {}
 
 def normalize_money_str(amount: str | int | float | Decimal) -> str:  # pragma: no cover
     """Parse human/ASR money input (including French decimal comma) into a canonical decimal string."""
@@ -1373,18 +1376,24 @@ def _parse_positive_money(val: Any) -> Decimal | None:  # pragma: no cover
     except Exception:
         return None
 
+def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
+    """Read a whole-number variable, handling platform float serialization."""
+    if not callable(getattr(state, "get", None)):
+        return 0
+    try:
+        val = state.get(key)
+        if isinstance(val, bool) or val is None:
+            return 0
+        return int(float(val or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
 def _record_audit(state: dict[str, Any]) -> None:  # pragma: no cover
     """Increment audit log count inside auth, mutation, and handover tools."""
     state["audit_log_count"] = read_count(state, "audit_log_count") + 1
 
 def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:  # pragma: no cover
-    """Resolve session language with asymmetric lock: non-English locks over English.
-
-    When state has no language or is default 'en-US', a model-supplied
-    non-English locale (fr-CA/es-US/...) is accepted and becomes the lock.
-    Once state holds a non-English locale, a model-supplied 'en-US' or empty
-    value is ignored (PRD BR-TV-004 lock).
-    """
+    """Resolve session language with asymmetric lock and explicit bidirectional switch."""
     has_state_dict = callable(getattr(state, "get", None))
     current = ""
     if has_state_dict:
@@ -1396,8 +1405,40 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str: 
     if language and str(language).strip():
         arg_lang = resolve_copy_locale(str(language))
 
-    # 1. Once state holds a non-English locale, model-supplied en-US/empty is ignored.
+    # Check for explicit language switch requests (BR-TV-004, BR-TV-020)
+    explicit_target = ""
+    if has_state_dict:
+        explicit_switch = str(state.get("explicit_language_switch") or "").strip()
+        if explicit_switch:
+            explicit_target = resolve_copy_locale(explicit_switch)
+        else:
+            combined_utt = " ".join([
+                str(state.get("utterance") or ""),
+                str(state.get("last_user_utterance") or ""),
+            ]).lower()
+            en_phrases = ("switch to english", "in english", "speak english", "en anglais", "anglais", "english please")
+            fr_phrases = ("switch to french", "in french", "speak french", "en français", "en francais", "french please")
+            es_phrases = ("switch to spanish", "in spanish", "speak spanish", "en español", "en espanol", "spanish please")
+            if any(p in combined_utt for p in en_phrases):
+                explicit_target = "en-US"
+            elif any(p in combined_utt for p in fr_phrases):
+                explicit_target = "fr-CA"
+            elif any(p in combined_utt for p in es_phrases):
+                explicit_target = "es-US"
+
+    if explicit_target:
+        if has_state_dict:
+            state["language"] = explicit_target
+            state["preferred_language"] = explicit_target
+            state["explicit_language_switch"] = explicit_target
+        return explicit_target
+
+    # 1. Once state holds a non-English locale, model-supplied en-US/empty without explicit switch is ignored.
     if current and current != "en-US":
+        if arg_lang and arg_lang != "en-US" and arg_lang != current:
+            state["language"] = arg_lang
+            state["preferred_language"] = arg_lang
+            return arg_lang
         state["language"] = current
         if not state.get("preferred_language"):
             state["preferred_language"] = current
@@ -1433,6 +1474,19 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str: 
             return "en-US"
 
     return resolve_copy_locale(None)
+
+def display_amount(value: Any) -> str:  # pragma: no cover
+    """Format money for speech: 12.5 -> "12.50" (two decimals, half-up rounding)."""
+    if isinstance(value, bool) or value is None:
+        raise ValueError(f"not an amount: {value!r}")
+    try:
+        norm = normalize_money_str(value)
+        amount = Decimal(norm)
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"not an amount: {value!r}") from exc
+    if not amount.is_finite():
+        raise ValueError(f"not an amount: {value!r}")
+    return str(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 CATALOG_COPY: dict[str, dict[str, str]] = {  # pragma: no cover
     "Account credit": {
@@ -1652,11 +1706,17 @@ def browse_plans_and_coverage_impl(  # pragma: no cover
         a_copy["estimated_tax"] = str(a_tax)
         a_copy["estimated_total_monthly"] = str(a_total)
         a_copy["monthly_total_with_tax"] = str(a_total)
-        if a.get("category") == "tv" or a.get("id") == "ADDON-SPORTS":
-            a_copy["included_channels"] = "TSN 1-5, Sportsnet, ESPN, FS1, RDS, NBA TV, MLB Network, NFL Network, Golf Channel, and regional sports networks in 4K/HD"
-            a_copy["combined_monthly_with_tv_starter"] = "43.00"
-            a_copy["combined_monthly_with_tv_starter_before_tax"] = "43.00"
-            a_copy["combined_monthly_with_tv_starter_with_tax"] = "49.45"
+        if a.get("included_channels"):
+            a_copy["included_channels"] = a["included_channels"]
+            tv_plans = FAKE_PLAN_CATALOG.get("tv", [])
+            base_tv_plan = next((p for p in tv_plans if "starter" in p.get("id", "").lower() or "starter" in p.get("name", "").lower()), tv_plans[0] if tv_plans else None)
+            base_price = Decimal(str(base_tv_plan.get("monthly_price", 25.00))) if base_tv_plan else Decimal("25.00")
+            comb_before_tax = (base_price + a_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            comb_tax = (comb_before_tax * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            comb_with_tax = (comb_before_tax + comb_tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            a_copy["combined_monthly_with_tv_starter"] = display_amount(comb_before_tax)
+            a_copy["combined_monthly_with_tv_starter_before_tax"] = display_amount(comb_before_tax)
+            a_copy["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
         addons_enriched.append(a_copy)
 
     state["shortlisted_plan_ids"] = ",".join(p["id"] for p in shortlist)
