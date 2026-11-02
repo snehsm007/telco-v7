@@ -37,7 +37,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python & uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         run: make install
@@ -105,7 +105,7 @@ jobs:
 
       - name: Set up Python & uv
         if: steps.check_wif.outputs.enabled == 'true'
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         if: steps.check_wif.outputs.enabled == 'true'
