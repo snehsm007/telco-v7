@@ -1664,16 +1664,41 @@ def lookup_account_impl(  # pragma: no cover
     state["bank_last4"] = bank_on_file if bank_on_file else (state.get("bank_last4") or "6789")
     state["current_balance"] = str(account.get("current_balance") or "0.00")
     state["past_due_balance"] = str(account.get("past_due_balance") or "0.00")
-    state["is_suspended"] = account.get("is_suspended", False)
-    state["suspension_reason"] = account.get("suspension_reason", "")
+    fx_susp = get_fixture_fact(state, "fx_account_suspended")
+    if fx_susp is not None:
+        state["is_suspended"] = str(fx_susp).strip().lower() in ("true", "1", "yes")
+        account["is_suspended"] = state["is_suspended"]
+        account["status"] = "suspended" if state["is_suspended"] else "active"
+    else:
+        state["is_suspended"] = account.get("is_suspended", False)
+
+    fx_reason = get_fixture_fact(state, "fx_suspension_reason")
+    if fx_reason:
+        state["suspension_reason"] = str(fx_reason).strip()
+        account["suspension_reason"] = str(fx_reason).strip()
+    else:
+        state["suspension_reason"] = account.get("suspension_reason", "")
+
+    fx_mfa = get_fixture_fact(state, "fx_mfa_enabled")
+    if fx_mfa is not None:
+        state["mfa_enabled"] = str(fx_mfa).strip().lower() in ("true", "1", "yes")
+        account["mfa_enabled"] = state["mfa_enabled"]
+    elif "mfa_enabled" in account:
+        state["mfa_enabled"] = account["mfa_enabled"]
 
     pc = (str(postal_code or state.get("postal_code") or "")).strip().upper()
     reg_alert = ""
+    fx_outage = get_fixture_fact(state, "fx_outage_status")
+    has_outage_banner = (
+        str(fx_outage).strip().lower() in ("active", "outage", "true", "yes")
+        if fx_outage is not None
+        else (bool(pc) and any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES))
+    )
     if pc:
         state["postal_code"] = pc
-        if any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES):
-            reg_alert = spoken_line("service_alert_banner", lang)
-            state["regional_alert"] = reg_alert
+    if has_outage_banner:
+        reg_alert = spoken_line("service_alert_banner", lang)
+        state["regional_alert"] = reg_alert
 
     if account.get("preferred_language") and not state.get("preferred_language"):
         state["preferred_language"] = account["preferred_language"]
@@ -1692,6 +1717,9 @@ def lookup_account_impl(  # pragma: no cover
         "account_found": True,
         "auth_status": state["auth_status"],
         "regional_alert": reg_alert,
+        "is_suspended": state["is_suspended"],
+        "suspension_reason": state["suspension_reason"],
+        "mfa_enabled": state.get("mfa_enabled", False),
     }
     if email_val:
         reply_data["email"] = email_val
@@ -2310,19 +2338,64 @@ def get_appointment_and_ticket_status_impl(  # pragma: no cover
     tkt = dyn_apts["repair_ticket"]
     slots = dyn_apts["available_reschedule_slots"]
 
-    state["active_appointment_id"] = apt["appointment_id"]
-    state["appointment_status"] = apt["status"]
-    state["technician_status"] = apt["technician_status"]
+    fx_tech = get_fixture_fact(state, "fx_tech_status")
+    tech_status = str(fx_tech).strip().lower() if fx_tech else str(apt.get("technician_status") or "scheduled").lower()
+    if tech_status in ("delayed", "retard", "retrasado"):
+        tech_status = "delayed"
+        loc_window_display = localized_text(
+            lang,
+            "1:00 PM - 3:00 PM (Delayed)",
+            "13 h 00 - 15 h 00 (En retard)",
+            "1:00 PM - 3:00 PM (Retrasado)",
+        )
+        tech_note = localized_text(
+            lang,
+            "Technician Marc-Andre is delayed due to an earlier job. Estimated arrival is now between 1:00 PM and 3:00 PM. Would you like to keep this appointment or reschedule to another day?",
+            "Le technicien Marc-André a du retard en raison d'une intervention précédente. L'arrivée est maintenant prévue entre 13 h 00 et 15 h 00. Souhaitez-vous maintenir ce rendez-vous ou le reporter à un autre jour ?",
+            "El técnico Marc-Andre está retrasado debido a un trabajo anterior. La llegada estimada ahora es entre la 1:00 PM y las 3:00 PM. ¿Desea mantener esta cita o reprogramarla para otro día?",
+        )
+        apt_copy = dict(apt)
+        apt_copy["status"] = "delayed"
+        apt_copy["technician_status"] = "delayed"
+        apt_copy["window_display"] = loc_window_display
+        apt_copy["arrival_window"] = loc_window_display
+        apt_copy["delayed_eta"] = loc_window_display
+        apt_copy["delay_reason"] = "prior_job_overrun"
+        apt_copy["reschedule_offered"] = True
+    elif tech_status in ("en_route", "en route", "enroute"):
+        tech_status = "en_route"
+        loc_window_display = localized_text(
+            lang,
+            "8:00 AM - 12:00 PM",
+            "8 h 00 - 12 h 00",
+            "8:00 AM - 12:00 PM",
+        )
+        tech_note = localized_text(
+            lang,
+            "Technician Marc-Andre is currently en route and expected within the scheduled window (8:00 AM - 12:00 PM).",
+            "Le technicien Marc-André est actuellement en route et prévu pendant la plage horaire prévue (8 h 00 - 12 h 00).",
+            "El técnico Marc-Andre está actualmente en camino y se espera dentro del horario programado (8:00 AM - 12:00 PM).",
+        )
+        apt_copy = dict(apt)
+        apt_copy["technician_status"] = "en_route"
+        apt_copy["window_display"] = loc_window_display
+        apt_copy["arrival_window"] = loc_window_display
+    else:
+        tech_status = "scheduled"
+        loc_window_display = localized_text(
+            lang,
+            "8:00 AM - 12:00 PM",
+            "8 h 00 - 12 h 00",
+            "8:00 AM - 12:00 PM",
+        )
+        tech_note = ""
+        apt_copy = dict(apt)
+        apt_copy["window_display"] = loc_window_display
+        apt_copy["arrival_window"] = loc_window_display
 
-    loc_window_display = localized_text(
-        lang,
-        "8:00 AM - 12:00 PM",
-        "8 h 00 - 12 h 00",
-        "8:00 AM - 12:00 PM",
-    )
-    apt_copy = dict(apt)
-    apt_copy["window_display"] = loc_window_display
-    apt_copy["arrival_window"] = loc_window_display
+    state["active_appointment_id"] = apt["appointment_id"]
+    state["appointment_status"] = apt_copy["status"]
+    state["technician_status"] = tech_status
 
     win_key = "window_fr" if lang == "fr-CA" else ("window_es" if lang == "es-US" else "window_en")
     localized_slots = []
@@ -2331,19 +2404,32 @@ def get_appointment_and_ticket_status_impl(  # pragma: no cover
         s_copy["window"] = s.get(win_key, s.get("window_en", ""))
         localized_slots.append(s_copy)
 
+    reply_payload: dict[str, Any] = {
+        "active_appointment": apt_copy,
+        "repair_ticket": tkt,
+        "available_slots": localized_slots,
+        "appointment_id": apt["appointment_id"],
+        "scheduled_date": apt["scheduled_date"],
+        "arrival_window": loc_window_display,
+        "window_display": loc_window_display,
+        "technician_status": tech_status,
+        "ticket_id": tkt["ticket_id"],
+        "ticket_status": tkt["status"],
+    }
+    if tech_note:
+        reply_payload["spoken_message"] = tech_note
+    if tech_status == "delayed":
+        reply_payload["delayed_eta"] = loc_window_display
+        reply_payload["delay_note"] = tech_note
+        reply_payload["reschedule_offered"] = True
+        reply_payload["agent_action"] = localized_text(
+            lang,
+            "Inform the caller that the technician is delayed with arrival now between 1:00 PM and 3:00 PM, and offer the available reschedule slots.",
+            "Informer le client que le technicien est en retard avec une arrivée prévue entre 13 h 00 et 15 h 00, et proposer les plages de report disponibles.",
+            "Informe al cliente que el técnico está retrasado con llegada entre la 1:00 PM y las 3:00 PM, y ofrezca las opciones de reprogramación disponibles.",
+        )
     return ok_reply(
-        {
-            "active_appointment": apt_copy,
-            "repair_ticket": tkt,
-            "available_slots": localized_slots,
-            "appointment_id": apt["appointment_id"],
-            "scheduled_date": apt["scheduled_date"],
-            "arrival_window": loc_window_display,
-            "window_display": loc_window_display,
-            "technician_status": apt["technician_status"],
-            "ticket_id": tkt["ticket_id"],
-            "ticket_status": tkt["status"],
-        },
+        reply_payload,
         reference,
         language=lang,
     )

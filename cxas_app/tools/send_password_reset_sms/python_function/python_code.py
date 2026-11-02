@@ -1596,16 +1596,41 @@ def lookup_account_impl(  # pragma: no cover
     state["bank_last4"] = bank_on_file if bank_on_file else (state.get("bank_last4") or "6789")
     state["current_balance"] = str(account.get("current_balance") or "0.00")
     state["past_due_balance"] = str(account.get("past_due_balance") or "0.00")
-    state["is_suspended"] = account.get("is_suspended", False)
-    state["suspension_reason"] = account.get("suspension_reason", "")
+    fx_susp = get_fixture_fact(state, "fx_account_suspended")
+    if fx_susp is not None:
+        state["is_suspended"] = str(fx_susp).strip().lower() in ("true", "1", "yes")
+        account["is_suspended"] = state["is_suspended"]
+        account["status"] = "suspended" if state["is_suspended"] else "active"
+    else:
+        state["is_suspended"] = account.get("is_suspended", False)
+
+    fx_reason = get_fixture_fact(state, "fx_suspension_reason")
+    if fx_reason:
+        state["suspension_reason"] = str(fx_reason).strip()
+        account["suspension_reason"] = str(fx_reason).strip()
+    else:
+        state["suspension_reason"] = account.get("suspension_reason", "")
+
+    fx_mfa = get_fixture_fact(state, "fx_mfa_enabled")
+    if fx_mfa is not None:
+        state["mfa_enabled"] = str(fx_mfa).strip().lower() in ("true", "1", "yes")
+        account["mfa_enabled"] = state["mfa_enabled"]
+    elif "mfa_enabled" in account:
+        state["mfa_enabled"] = account["mfa_enabled"]
 
     pc = (str(postal_code or state.get("postal_code") or "")).strip().upper()
     reg_alert = ""
+    fx_outage = get_fixture_fact(state, "fx_outage_status")
+    has_outage_banner = (
+        str(fx_outage).strip().lower() in ("active", "outage", "true", "yes")
+        if fx_outage is not None
+        else (bool(pc) and any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES))
+    )
     if pc:
         state["postal_code"] = pc
-        if any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES):
-            reg_alert = spoken_line("service_alert_banner", lang)
-            state["regional_alert"] = reg_alert
+    if has_outage_banner:
+        reg_alert = spoken_line("service_alert_banner", lang)
+        state["regional_alert"] = reg_alert
 
     if account.get("preferred_language") and not state.get("preferred_language"):
         state["preferred_language"] = account["preferred_language"]
@@ -1624,6 +1649,9 @@ def lookup_account_impl(  # pragma: no cover
         "account_found": True,
         "auth_status": state["auth_status"],
         "regional_alert": reg_alert,
+        "is_suspended": state["is_suspended"],
+        "suspension_reason": state["suspension_reason"],
+        "mfa_enabled": state.get("mfa_enabled", False),
     }
     if email_val:
         reply_data["email"] = email_val
@@ -1700,6 +1728,35 @@ def send_password_reset_sms_impl(  # pragma: no cover
     reference = tracking_id("send_password_reset_sms", account_id)
     state["last_tracking_id"] = reference
 
+    fx_sms = get_fixture_fact(state, "fx_sms_delivery")
+    is_failed_delivery = str(fx_sms).strip().lower() == "failed"
+
+    if is_failed_delivery and state.get("password_reset_sent"):
+        action_text = localized_text(
+            lang,
+            "Explain that SMS delivery to this mobile number failed. Offer transfer to a live representative or email recovery.",
+            "Expliquez que l'envoi du SMS à ce numéro de mobile a échoué. Proposez le transfert à un représentant en direct ou la récupération par courriel.",
+            "Explique que falló la entrega del SMS a este número de móvil. Ofrezca transferencia a un representante en vivo o recuperación por correo.",
+        )
+        msg_text = localized_text(
+            lang,
+            "SMS delivery of the password reset link failed. Please speak to a representative for account assistance.",
+            "L'envoi par SMS du lien de réinitialisation a échoué. Veuillez vous adresser à un représentant pour obtenir de l'aide.",
+            "Falló la entrega por SMS del enlace de restablecimiento. Por favor hable con un representante para recibir asistencia.",
+        )
+        return error_reply(
+            "CODE_NOT_SENT",
+            message=msg_text,
+            agent_action=action_text,
+            reference=reference,
+            language=lang,
+            data={
+                "sms_delivery_status": "failed",
+                "must_escalate": True,
+                "agent_action": action_text,
+            },
+        )
+
     _record_audit(state)
     state["password_reset_sent"] = True
 
@@ -1716,7 +1773,7 @@ def send_password_reset_sms_impl(  # pragma: no cover
             lang,
             "A password reset link has been sent to the mobile phone on file and is valid for 30 minutes.",
             "Un lien de réinitialisation a été envoyé au cellulaire au dossier et est valide pendant 30 minutes.",
-            "Se ha enviado un enlace de restablecimiento al teléfono móvil registrado y es válido durante 30 minutos.",
+            "Se ha enviado un enlace de restablecimiento al teléfono móvil registrado y es válido durante 30 minutes.",
         )
 
     return ok_reply(
@@ -1728,6 +1785,7 @@ def send_password_reset_sms_impl(  # pragma: no cover
             "can_change_password_by_voice": False,
             "spoken_summary": summary,
             "spoken_message": summary,
+            "sms_delivery_status": "failed" if is_failed_delivery else "delivered",
         },
         reference,
         language=lang,
