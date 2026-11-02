@@ -362,6 +362,11 @@ _DP_CANADIAN_POSTAL_RE = re.compile(
 )
 _DP_STREET_NUMBER_RE = re.compile(r"\b\d{1,5}\b")
 
+_RE_STATE_UPDATE = re.compile(
+    r"<state_update\b[^>]*>[\s\S]*?</state_update>|<state_update\b[^>]*/>",
+    re.IGNORECASE,
+)
+
 _DP_NEGATED_SWITCH_PREFIX_RE = re.compile(
     r"(?:"
     r"\b(?:don't|do\s+not|dont|cannot|can't|cant|not)\s+"
@@ -389,6 +394,12 @@ _DP_EXPLICIT_SWITCH_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "speak french",
             "passer au français",
             "passer au francais",
+            "revenir au français",
+            "revenir au francais",
+            "parlez français",
+            "parlez francais",
+            "parlons français",
+            "parlons francais",
             "secondary language",
         ),
     ),
@@ -409,6 +420,10 @@ _DP_EXPLICIT_SWITCH_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "parler en anglais",
             "passer à l'anglais",
             "passer a l'anglais",
+            "revenir à l'anglais",
+            "revenir a l'anglais",
+            "parlez anglais",
+            "parlons anglais",
             "primary language",
             "en inglés",
             "en ingles",
@@ -429,6 +444,8 @@ _DP_EXPLICIT_SWITCH_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "hablar espanol",
             "habla español",
             "habla espanol",
+            "hablemos en español",
+            "hablemos español",
             "switch to spanish",
             "switch back to spanish",
             "back to spanish",
@@ -436,8 +453,14 @@ _DP_EXPLICIT_SWITCH_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "in spanish",
             "in spanish please",
             "speak spanish",
+            "cambiar a español",
+            "cambiar a espanol",
+            "volver al español",
+            "volver al espanol",
             "en espagnol",
             "parler en espagnol",
+            "passer à l'espagnol",
+            "passer a l'espagnol",
         ),
     ),
     (
@@ -597,6 +620,7 @@ def detect_utterance_language(
             is_turn_1 = False
 
     raw = str(utterance or "").strip()
+    raw = _RE_STATE_UPDATE.sub("", raw).strip()
     if is_turn_1 and not language_locked:
         if re.fullmatch(
             r"(?:\[?(?:dtmf|touch-?tone|keypad|option|choice|touche|user)?\s*[:#-]?\s*)?2(?:[.#*]|\]|\s)*",
@@ -731,13 +755,14 @@ _RE_RELAY_ACTIVE_LANG = re.compile(
 
 
 def _is_relay_or_quoted_part(txt: str) -> bool:
-    """Return True if txt is an ADK relay part, agent event, or quoted content block."""
+    """Return True if txt is an ADK relay part, agent event, state update, or quoted content block."""
     s = txt.strip()
     if not s:
         return True
     if _RE_RELAY_PREFIX.match(s):
         return True
-    cleaned = _RE_QUOTED_AGENT_BLOCK.sub("", s).strip()
+    cleaned = _RE_QUOTED_AGENT_BLOCK.sub("", s)
+    cleaned = _RE_STATE_UPDATE.sub("", cleaned).strip()
     if not cleaned:
         return True
     if _RE_RELAY_PREFIX.match(cleaned):
@@ -792,11 +817,15 @@ def extract_user_utterances(llm_request: Any) -> list[str]:
                     txt = getattr(part, "text", None)
                     if txt and isinstance(txt, str) and txt.strip():
                         if not _is_relay_or_quoted_part(txt):
-                            utterances.append(txt.strip())
+                            sanitized = _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", txt)).strip()
+                            if sanitized:
+                                utterances.append(sanitized)
             elif isinstance(getattr(item, "text", None), str):
                 t = item.text.strip()
                 if t and not _is_relay_or_quoted_part(t):
-                    utterances.append(t)
+                    sanitized = _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", t)).strip()
+                    if sanitized:
+                        utterances.append(sanitized)
     return utterances
 
 
@@ -805,14 +834,6 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
     user_utterances = extract_user_utterances(llm_request)
     state_get = getattr(state_dict, "get", None)
     has_state = callable(state_get)
-
-    explicit_in_state = (
-        str(state_dict.get("explicit_language_switch") or "").strip()
-        if has_state
-        else ""
-    )
-    if explicit_in_state:
-        return resolve_locale(explicit_in_state)
 
     is_locked = bool(state_dict.get("language_locked", False)) if has_state else False
     locked = (
@@ -827,11 +848,21 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
         if relayed:
             locked = relayed
 
+    explicit_in_state = (
+        str(state_dict.get("explicit_language_switch") or "").strip()
+        if has_state
+        else ""
+    )
+    if explicit_in_state:
+        explicit_in_state = resolve_locale(explicit_in_state)
+
     if not user_utterances:
+        if explicit_in_state:
+            return explicit_in_state
         return locked if locked else "en-US"
 
-    current = locked if locked else "en-US"
-    has_locked = is_locked or bool(locked and locked != "en-US")
+    current = explicit_in_state or locked or "en-US"
+    has_locked = is_locked or bool(locked and locked != "en-US") or bool(explicit_in_state)
 
     for idx, utt in enumerate(user_utterances):
         low = utt.lower()
@@ -938,10 +969,10 @@ def apply_language_prompt_filter(
     )
     if should_sync and hasattr(state, "__setitem__"):
         try:
-            state["turn_index"] = int(state.get("turn_index", 0)) + 1
-            state["language"] = locale
-            state["language_locked"] = True
             if latest_utt:
+                state["turn_index"] = int(state.get("turn_index", 0)) + 1
+                state["language"] = locale
+                state["language_locked"] = True
                 state["utterance"] = latest_utt
                 state["last_user_utterance"] = latest_utt
                 state["dtmf_digits"] = extract_dtmf_digits(latest_utt)
@@ -950,6 +981,8 @@ def apply_language_prompt_filter(
                     state["explicit_language_switch"] = switch
             else:
                 state["dtmf_digits"] = ""
+                if not state.get("language"):
+                    state["language"] = locale
         except (TypeError, AttributeError):
             pass
 

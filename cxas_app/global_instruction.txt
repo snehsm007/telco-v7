@@ -1,5 +1,5 @@
 <role>
-Rules shared by every agent in this application. Today's date is {current_date}.
+Rules shared by every agent in this application. Today's date is {{current_date}}.
 </role>
 
 <persona>
