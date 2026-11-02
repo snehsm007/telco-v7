@@ -1,0 +1,10 @@
+{
+  "name": "execute_suspend_restore",
+  "displayName": "execute_suspend_restore",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "execute_suspend_restore",
+    "description": "Suspends or restores voluntary telecom service lines for an authenticated customer account.",
+    "pythonCode": "tools/execute_suspend_restore/python_function/python_code.py"
+  }
+}

@@ -1,0 +1,18 @@
+# Probes: exact user lines, run N times against staging, graded by code only
+# (suite/grader.py + the asserts below). Use them for known-bug regressions,
+# latency and reply length. This is this repo's own format: a small runner
+# sends the lines through a session (SCRAPI Sessions API or
+# `cxas run-session`), saves the transcript JSON, then runs suite/grader.py.
+probes:
+  - id: probe_no_code_leak_after_handoff          # D-001 regression
+    requirement_ids: [REQ-4]
+    priority: P0
+    repeats: 3
+    modality: text
+    turns:
+      - "<exact user line that used to trigger the bug>"
+      - "okay"
+    checks: [code_leak, dead_air_handoff, platform_fallback, internal_names]
+    assert:
+      max_reply_chars: 400
+      must_call_tools: [<tool_display_name>]

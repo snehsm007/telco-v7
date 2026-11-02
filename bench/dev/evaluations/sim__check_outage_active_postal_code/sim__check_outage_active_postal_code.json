@@ -1,0 +1,19 @@
+{
+  "name": "b5d10eb8-c0fb-475b-862c-41e6f16186b5",
+  "displayName": "sim__check_outage_active_postal_code",
+  "scenario": {
+    "task": "My home Wi-Fi isn't working, and I want to check if there is an active internet outage in my area (postal code H3Z 2Y7)\n\nUser Guide: The user is calling because their internet is down. They provide postal code H3Z 2Y7 when prompted and eagerly accept the offer for SMS restoration updates If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_0b51090b"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

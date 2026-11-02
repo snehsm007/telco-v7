@@ -1,0 +1,782 @@
+{
+  "name": "c9ab923f-9599-49a0-8a16-48c5eebdb6df",
+  "displayName": "telco-v5-snehsm",
+  "description": "telco-v5-snehsm voice and chat agent.",
+  "rootAgent": "router",
+  "globalInstruction": "global_instruction.txt",
+  "modelSettings": {
+    "model": "gemini-composite-v2",
+    "temperature": 1.0
+  },
+  "languageSettings": {
+    "defaultLanguageCode": "en-US",
+    "supportedLanguageCodes": [
+      "en-US",
+      "fr-CA",
+      "es-US"
+    ],
+    "enableMultilingualSupport": true
+  },
+  "audioProcessingConfig": {
+    "synthesizeSpeechConfigs": {
+      "en-US": {
+        "voice": "en-US-Chirp3-HD-Charon",
+        "speakingRate": 1.0
+      },
+      "fr-CA": {
+        "voice": "fr-CA-Chirp3-HD-Charon",
+        "speakingRate": 1.0
+      },
+      "es-US": {
+        "voice": "es-US-Chirp3-HD-Charon",
+        "speakingRate": 1.0
+      }
+    },
+    "bargeInConfig": {
+      "bargeInAwareness": true
+    }
+  },
+  "defaultChannelProfile": {
+    "noiseSuppressionLevel": "HIGH"
+  },
+  "loggingSettings": {
+    "evaluationAudioRecordingConfig": {
+      "gcsBucket": "gs://google.com:nextgen-sandbox-eval-audio",
+      "gcsPathPrefix": "eval-audio/$session"
+    },
+    "redactionConfig": {
+      "enableRedaction": true,
+      "inspectTemplate": "projects/google.com:nextgen-sandbox/locations/us/inspectTemplates/telco-v5-snehsm-pii-inspect",
+      "deidentifyTemplate": "projects/google.com:nextgen-sandbox/locations/us/deidentifyTemplates/telco-v5-snehsm-pii-deidentify"
+    }
+  },
+  "timeZoneSettings": {
+    "timeZone": "America/New_York"
+  },
+  "variableDeclarations": [
+    {
+      "name": "account_id",
+      "description": "Account found by lookup_account. Empty until the caller is identified.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "phone_last4",
+      "description": "Last 4 digits of the accounts phone number; safe to say aloud.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "caller_provided_phone_last4",
+      "description": "Last 4 digits of the phone number the caller actually gave on this call.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "auth_status",
+      "description": "Login progress: none, code_sent, pass or locked. Only check_login_code or check_secret_pin sets pass.",
+      "schema": {
+        "type": "STRING",
+        "default": "none",
+        "required": []
+      }
+    },
+    {
+      "name": "login_code_sent",
+      "description": "True once send_login_code has sent a code on the active account.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "logged_in",
+      "description": "True once caller has successfully verified login authentication.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "auth_failure_count",
+      "description": "Number of failed authentication attempts in current session.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "login_attempts",
+      "description": "Counter of SMS/code login validation attempts.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "pin_failure_count",
+      "description": "Count of invalid PIN entries.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "pin_attempts",
+      "description": "Counter of secret PIN validation attempts.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "payment_failure_count",
+      "description": "Count of failed or declined payment attempts.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "card_last4",
+      "description": "Last 4 digits of primary payment card on file.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "card_token",
+      "description": "Masked payment card token for enrolled card.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "card_capture_prompted",
+      "description": "True when caller has been prompted to enter card digits on keypad.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "preamble_spoken",
+      "description": "True when PCI payment method preamble has been spoken in session.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "pending_card_last4",
+      "description": "Caller-stated last 4 digits of card awaiting keypad capture.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "declined_card_last4",
+      "description": "Last 4 digits of card that was declined.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "payment_declined_once",
+      "description": "True if payment attempt was declined at least once.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "last_payment_method",
+      "description": "Last payment method used (card, bank, autopay).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "mock_error",
+      "description": "Injected test mock error condition code.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "language",
+      "description": "Session language code (en-US, fr-CA, es-US).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "preferred_language",
+      "description": "Subscribers preferred language on file.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "preferred_mfa_channel",
+      "description": "Subscribers active MFA delivery channel (sms, email, or authenticator_app).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "lookup_by_name",
+      "description": "True when caller account was identified via caller name lookup.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "last_user_utterance",
+      "description": "Verbatim transcript of most recent caller utterance.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "handoff_reason",
+      "description": "Machine-readable reason for agent handover.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "handoff_status",
+      "description": "Current status of agent escalation handoff.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "handover_complete",
+      "description": "True if transfer to live human agent is completed.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "handoff_message",
+      "description": "Summary context passed to human agent queue.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "last_tracking_id",
+      "description": "Tracking identifier for hardware shipment or order.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "request_summary",
+      "description": "Summary of user inquiry or submitted transaction.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "active_appointment_id",
+      "description": "ID of currently scheduled technician or store appointment.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "after_hours",
+      "description": "True if call is received outside standard support hours.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "appointment_cancel_confirmed",
+      "description": "True if caller confirmed appointment cancellation.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "appointment_status",
+      "description": "Status of service appointment (e.g. SCHEDULED, CANCELLED).",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "audit_log_count",
+      "description": "Count of audit events logged in session.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "autopay_day",
+      "description": "Day of month for automatic recurring billing.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "autopay_enrolled",
+      "description": "True if account is enrolled in AutoPay.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "bank_last4",
+      "description": "Last 4 digits of bank account used for payments.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "business_flag",
+      "description": "True if account belongs to business tier.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "cancellation_fee_disclosed",
+      "description": "True if cancellation fee disclosure was acknowledged.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "contact_email",
+      "description": "Subscribers primary contact email.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "current_balance",
+      "description": "Current total account balance in dollars.",
+      "schema": {
+        "type": "STRING",
+        "default": "0.00",
+        "required": []
+      }
+    },
+    {
+      "name": "customer_type",
+      "description": "Type of customer: residential or business.",
+      "schema": {
+        "type": "STRING",
+        "default": "residential",
+        "required": []
+      }
+    },
+    {
+      "name": "dispute_ticket_id",
+      "description": "Ticket ID for billing dispute or waiver.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "identified",
+      "description": "True once subscriber account has been identified.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "is_blocked",
+      "description": "True if caller or account is blocked for fraud/abuse.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "is_suspended",
+      "description": "True if service is currently suspended.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "last_order_id",
+      "description": "ID of last order placed.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "login_channel",
+      "description": "Channel used for login authentication verification.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "lost_authenticator",
+      "description": "True if subscriber lost their MFA authenticator.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "mfa_email_code_sent",
+      "description": "True if MFA code was sent via email.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "mfa_email_verified",
+      "description": "True if MFA code from email was verified.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "mfa_enabled",
+      "description": "True if MFA is enabled on the account.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "outage_active",
+      "description": "True if there is an active network outage in the area.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "outage_sms_subscribed",
+      "description": "True if caller subscribed to outage SMS alerts.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "password_reset_sent",
+      "description": "True if password reset notification was sent.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "past_due_balance",
+      "description": "Overdue balance amount in dollars.",
+      "schema": {
+        "type": "STRING",
+        "default": "0.00",
+        "required": []
+      }
+    },
+    {
+      "name": "payment_arrangement_active",
+      "description": "True if an active payment arrangement exists.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "payment_arrangement_due_date",
+      "description": "Agreed due date for payment arrangement installment.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "port_in_request_id",
+      "description": "Ticket ID for telephone number port-in request.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "postal_code",
+      "description": "Postal code for service location.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "refund_applied_amount",
+      "description": "Amount credited or refunded in dollars.",
+      "schema": {
+        "type": "STRING",
+        "default": "0.00",
+        "required": []
+      }
+    },
+    {
+      "name": "regional_alert",
+      "description": "Active regional alert or weather advisory text.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "selected_plan_id",
+      "description": "Identifier of selected plan during change_plan.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "service_address",
+      "description": "Physical installation address for telecom service.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "service_cancelled",
+      "description": "True if service cancellation was completed.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "service_restored",
+      "description": "True if suspended service was restored.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "browsed_plan_category",
+      "description": "Plan category most recently browsed during sales flows.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "shortlisted_plan_ids",
+      "description": "Comma-separated list of plan IDs shortlisted.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "suspension_reason",
+      "description": "Reason given for account suspension.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "technician_status",
+      "description": "Dispatch status of technician appointment.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "troubleshooting_sms_sent",
+      "description": "True if automated troubleshooting guide SMS was sent.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "troubleshooting_sms_attempts",
+      "description": "Counter of troubleshooting SMS dispatch attempts.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "tv_sub_type",
+      "description": "Current television package tier.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "warranty_claim_id",
+      "description": "Identifier for hardware warranty claim.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "warranty_damage_checked",
+      "description": "True if physical damage assessment was completed.",
+      "schema": {
+        "type": "BOOLEAN",
+        "default": false,
+        "required": []
+      }
+    },
+    {
+      "name": "local_noinput_counter",
+      "description": "Consecutive turns with no caller input detected.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "no_match_confirmation_count",
+      "description": "Consecutive turns with unmatchable caller input.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "global_err_count",
+      "description": "Total cumulative errors in session.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    }
+  ],
+  "guardrails": [
+    "Default Safety Guardrail",
+    "Default Prompt Guardrail"
+  ]
+}

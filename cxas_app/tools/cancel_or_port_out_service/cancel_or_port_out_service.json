@@ -1,0 +1,10 @@
+{
+  "name": "cancel_or_port_out_service",
+  "displayName": "cancel_or_port_out_service",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "cancel_or_port_out_service",
+    "description": "Handles cancellation, port-out, or retention offer acceptance for service lines with mandatory 2-step contract fee disclosure before final confirmation.",
+    "pythonCode": "tools/cancel_or_port_out_service/python_function/python_code.py"
+  }
+}

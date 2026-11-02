@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Eval run record (one line of history/runs.jsonl = one test x one repeat)",
+  "type": "object",
+  "required": ["run_id", "timestamp", "git_sha", "agent_model", "test_id", "layer", "priority", "repeat", "status"],
+  "properties": {
+    "run_id": {"type": "string", "description": "Groups rows into one run, e.g. <date>-<sha7>-<trigger>"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "trigger": {"enum": ["local", "pr", "main", "nightly", "release"]},
+    "git_sha": {"type": "string"},
+    "dirty": {"type": "boolean", "description": "Uncommitted changes when the run started"},
+    "app_version": {"type": "string", "description": "CXAS app version resource the eval ran against"},
+    "agent_model": {"type": "string"},
+    "judge_model": {"type": "string"},
+    "eval_file_sha": {"type": "string", "description": "Hash of the eval YAML that ran"},
+    "test_id": {"type": "string"},
+    "layer": {"enum": ["tool", "callback", "contract", "golden", "sim", "probe", "audio_golden", "audio_sim", "holdout"]},
+    "requirement_ids": {"type": "array", "items": {"type": "string", "pattern": "^REQ-\\d+$"}},
+    "priority": {"enum": ["P0", "P1", "P2"]},
+    "modality": {"enum": ["text", "audio"]},
+    "repeat": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["pass", "fail", "infra_error"]},
+    "label": {"enum": ["", "real", "judge", "infra"], "description": "Filled in during review of failures"},
+    "reason": {"type": "string", "description": "Grader finding or judge reason, short"},
+    "grader_findings": {"type": "array", "items": {"type": "string"}},
+    "latency_ms_p50": {"type": "number"},
+    "reply_chars_max": {"type": "integer"},
+    "conversation_id": {"type": "string"},
+    "change_note": {"type": "string", "description": "Why this run happened"}
+  }
+}

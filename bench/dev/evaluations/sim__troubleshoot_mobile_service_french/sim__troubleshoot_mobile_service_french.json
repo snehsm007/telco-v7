@@ -1,0 +1,19 @@
+{
+  "name": "2373145a-ad04-4ceb-8766-efd38fb5fb00",
+  "displayName": "sim__troubleshoot_mobile_service_french",
+  "scenario": {
+    "task": "Je veux r\u00e9soudre un probl\u00e8me avec mon t\u00e9l\u00e9phone portable qui n'a plus de r\u00e9seau (aucun service)\n\nUser Guide: The user speaks Canadian French from the start. They will provide their phone number, verify their identity via OTP, and ask for help fixing their mobile connection. They will follow the steps or accept an SMS guide",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_e55cf8bb"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

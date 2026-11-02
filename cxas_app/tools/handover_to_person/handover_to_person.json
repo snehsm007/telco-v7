@@ -1,0 +1,10 @@
+{
+  "name": "handover_to_person",
+  "displayName": "handover_to_person",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "handover_to_person",
+    "description": "Records a handover to a human representative and returns the localized handoff_message to speak in the same turn before ending the session.",
+    "pythonCode": "tools/handover_to_person/python_function/python_code.py"
+  }
+}

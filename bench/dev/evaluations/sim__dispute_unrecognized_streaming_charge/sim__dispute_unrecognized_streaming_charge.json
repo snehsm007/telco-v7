@@ -1,0 +1,19 @@
+{
+  "name": "3f571c82-4d33-47f3-9c6f-8bc39a025a77",
+  "displayName": "sim__dispute_unrecognized_streaming_charge",
+  "scenario": {
+    "task": "I want to dispute an unfamiliar $12.50 streaming charge on my monthly bill and get a credit for it\n\nUser Guide: The user is polite but concerned about their bill. They will provide their phone number (514-555-0199) when asked, enter their PIN (1234) when prompted, and explain that they see an unrecognized $12.50 streaming charge that they want removed",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_8056ac46"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

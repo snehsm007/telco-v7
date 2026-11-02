@@ -1,0 +1,19 @@
+{
+  "name": "324a5cde-74d6-433f-a5b9-3c0bafd8e7d9",
+  "displayName": "sim__troubleshoot_satellite_tv_error",
+  "scenario": {
+    "task": "I want to fix my Satellite TV which is showing Error 101 on the screen\n\nUser Guide: The user explains they have Satellite TV and see Error 101. They will verify their identity and ask for steps to clear the error If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_eb733ad5"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

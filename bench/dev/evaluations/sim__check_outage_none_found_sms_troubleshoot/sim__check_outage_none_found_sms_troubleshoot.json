@@ -1,0 +1,19 @@
+{
+  "name": "094973dc-d23c-4053-95f1-87f52a2f0fa7",
+  "displayName": "sim__check_outage_none_found_sms_troubleshoot",
+  "scenario": {
+    "task": "My internet is down, but if there is no outage in my area, I want to get troubleshooting steps sent to my phone\n\nUser Guide: The user provides their postal code. When told there is no active outage in their area, they ask what they should do next and agree to receive troubleshooting steps on their mobile phone If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_6302e25e"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

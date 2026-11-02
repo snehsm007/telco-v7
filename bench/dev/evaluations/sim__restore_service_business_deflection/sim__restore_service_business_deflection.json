@@ -1,0 +1,19 @@
+{
+  "name": "63431657-18ce-4997-b28d-74f3033c0177",
+  "displayName": "sim__restore_service_business_deflection",
+  "scenario": {
+    "task": "My business phone line is suspended and I need to restore it immediately\n\nUser Guide: Say you need to restore your suspended business line. Provide your business account number and accept the transfer to a live business representative If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_b724e612"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

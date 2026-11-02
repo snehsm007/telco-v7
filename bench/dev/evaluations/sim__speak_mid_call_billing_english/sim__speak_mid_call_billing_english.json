@@ -1,0 +1,19 @@
+{
+  "name": "081e4585-6114-42bd-8281-a2a83eea18fc",
+  "displayName": "sim__speak_mid_call_billing_english",
+  "scenario": {
+    "task": "I want to ask about my bill, but then decide it's too complicated and ask to speak to a person instead\n\nUser Guide: Start by saying 'I have a question about my bill'. When the agent asks for your account details, say 'Actually, I just want to talk to a real person.' If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_98321a6b"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

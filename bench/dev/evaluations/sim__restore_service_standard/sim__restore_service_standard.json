@@ -1,0 +1,20 @@
+{
+  "name": "a3a7086c-a60f-4508-be3d-0d4fefa58c1b",
+  "displayName": "sim__restore_service_standard",
+  "scenario": {
+    "task": "My phone service was suspended because I forgot to pay my bill, and I want to pay it and get restored\n\nUser Guide: Say 'My phone line is suspended and I need to restore it.' Authenticate. When told it's due to non-payment, pay the outstanding balance. Confirm that your service is being restored If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_e82eb546",
+      "eval_exp_d3c2ba90"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

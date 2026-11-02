@@ -1,0 +1,20 @@
+{
+  "name": "11bf5755-62b5-4053-ba6a-43980afa34d1",
+  "displayName": "sim__check_tech_status_standard",
+  "scenario": {
+    "task": "I want to check if the technician is still scheduled to come to my house today to install my new internet service\n\nUser Guide: Start the call in English. When prompted, provide your phone number. Authenticate by reading back the 6-digit security code sent to your mobile. Ask 'Where is my technician?' and confirm you understand the status update If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_f3beeea7",
+      "eval_exp_c98c1b4f"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

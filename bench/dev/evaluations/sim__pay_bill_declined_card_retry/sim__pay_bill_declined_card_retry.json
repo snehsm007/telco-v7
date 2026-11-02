@@ -1,0 +1,19 @@
+{
+  "name": "91e08c04-0cb9-45d7-a13e-97a2c469b82c",
+  "displayName": "sim__pay_bill_declined_card_retry",
+  "scenario": {
+    "task": "I want to pay my bill, but if my primary card is declined, I want to try a different card\n\nUser Guide: The user authenticates and attempts to pay. When told the card on file was declined, they remain calm and provide details for a secondary credit card to complete the payment If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_a75697e9"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

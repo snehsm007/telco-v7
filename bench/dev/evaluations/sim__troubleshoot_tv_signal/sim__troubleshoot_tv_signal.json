@@ -1,0 +1,19 @@
+{
+  "name": "7a0c8f30-0143-4857-a518-02d71524dd35",
+  "displayName": "sim__troubleshoot_tv_signal",
+  "scenario": {
+    "task": "I want to fix my Fibe TV because it is showing a 'no signal' error on the screen\n\nUser Guide: The user is frustrated but cooperative. They will provide their account number, verify their identity via PIN when prompted, and follow the troubleshooting steps (like checking HDMI cables or restarting the receiver) or agree to receive the SMS guide",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_7ed0b8c1"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

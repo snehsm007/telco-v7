@@ -1,0 +1,19 @@
+{
+  "name": "c2e7c13b-0631-4303-9048-abb87fd05848",
+  "displayName": "sim__transfer_landline_mobile_french",
+  "scenario": {
+    "task": "Je veux transf\u00e9rer mon num\u00e9ro de t\u00e9l\u00e9phone fixe r\u00e9sidentiel vers ma nouvelle ligne mobile\n\nUser Guide: The user speaks Canadian French. They want to move their home phone number to a mobile SIM. They will verify their identity and provide the details to start the transfer If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_3684291a"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

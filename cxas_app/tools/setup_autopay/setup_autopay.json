@@ -1,0 +1,10 @@
+{
+  "name": "setup_autopay",
+  "displayName": "setup_autopay",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "setup_autopay",
+    "description": "Enrolls, updates, or cancels recurring autopay billing using a credit/debit card or bank checking account.",
+    "pythonCode": "tools/setup_autopay/python_function/python_code.py"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "116c45e8-4874-4a36-87bc-992d86eba39e",
+  "displayName": "eval_exp_02ddcd15",
+  "llmCriteria": {
+    "prompt": "The user successfully authenticates and retrieves their ticket status"
+  }
+}

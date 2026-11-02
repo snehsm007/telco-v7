@@ -1,0 +1,30 @@
+{
+  "name": "tech_support",
+  "displayName": "tech_support",
+  "description": "Technical support specialist: handles regional outages, service troubleshooting, technician appointments, and repair tickets.",
+  "instruction": "agents/tech_support/instruction.txt",
+  "tools": [
+    "lookup_account",
+    "send_login_code",
+    "verify_login",
+    "check_regional_outage",
+    "run_troubleshooting_and_sms",
+    "get_appointment_and_ticket_status",
+    "manage_appointment",
+    "handover_to_person",
+    "end_session"
+  ],
+  "childAgents": [],
+  "beforeModelCallbacks": [
+    {
+      "pythonCode": "agents/tech_support/before_model_callbacks/language_prompt_filter/python_code.py",
+      "description": "Inject active call language instructions and verbatim lines"
+    }
+  ],
+  "afterModelCallbacks": [
+    {
+      "pythonCode": "agents/tech_support/after_model_callbacks/speech_hygiene/python_code.py",
+      "description": "Clean speech, mask long numbers, and ensure valid handover lines"
+    }
+  ]
+}

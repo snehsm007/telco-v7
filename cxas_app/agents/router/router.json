@@ -1,0 +1,29 @@
+{
+  "name": "router",
+  "displayName": "router",
+  "description": "First agent: greets the caller, finds their account, and routes them to the specialist agent that handles their goal. Never logs callers in.",
+  "instruction": "agents/router/instruction.txt",
+  "tools": [
+    "lookup_account",
+    "handover_to_person",
+    "end_session"
+  ],
+  "childAgents": [
+    "billing",
+    "tech_support",
+    "sales_equipment",
+    "account"
+  ],
+  "beforeModelCallbacks": [
+    {
+      "pythonCode": "agents/router/before_model_callbacks/language_prompt_filter/python_code.py",
+      "description": "Inject active call language instructions and verbatim lines"
+    }
+  ],
+  "afterModelCallbacks": [
+    {
+      "pythonCode": "agents/router/after_model_callbacks/speech_hygiene/python_code.py",
+      "description": "Clean speech, mask long numbers, and ensure valid handover lines"
+    }
+  ]
+}

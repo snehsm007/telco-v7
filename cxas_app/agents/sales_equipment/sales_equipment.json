@@ -1,0 +1,30 @@
+{
+  "name": "sales_equipment",
+  "displayName": "sales_equipment",
+  "description": "Sales and equipment specialist: handles plan recommendations, plan upgrades, new orders, number transfers, and warranty claims.",
+  "instruction": "agents/sales_equipment/instruction.txt",
+  "tools": [
+    "lookup_account",
+    "send_login_code",
+    "verify_login",
+    "browse_plans_and_coverage",
+    "commit_plan_or_order",
+    "initiate_number_transfer",
+    "manage_warranty_claim",
+    "handover_to_person",
+    "end_session"
+  ],
+  "childAgents": [],
+  "beforeModelCallbacks": [
+    {
+      "pythonCode": "agents/sales_equipment/before_model_callbacks/language_prompt_filter/python_code.py",
+      "description": "Inject active call language instructions and verbatim lines"
+    }
+  ],
+  "afterModelCallbacks": [
+    {
+      "pythonCode": "agents/sales_equipment/after_model_callbacks/speech_hygiene/python_code.py",
+      "description": "Clean speech, mask long numbers, and ensure valid handover lines"
+    }
+  ]
+}

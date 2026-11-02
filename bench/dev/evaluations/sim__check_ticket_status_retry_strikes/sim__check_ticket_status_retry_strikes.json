@@ -1,0 +1,20 @@
+{
+  "name": "43640794-c7fb-4938-a718-0708935d7380",
+  "displayName": "sim__check_ticket_status_retry_strikes",
+  "scenario": {
+    "task": "I need to check the status of my open network ticket, but I am distracted and might miss a couple of prompts\n\nUser Guide: Do not respond to the first two prompts to simulate being distracted. On the third prompt, provide your phone number. Authenticate using your 4-digit PIN, then ask for your ticket status",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_966ae779",
+      "eval_exp_67086f88"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

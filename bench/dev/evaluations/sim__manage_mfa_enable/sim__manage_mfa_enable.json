@@ -1,0 +1,20 @@
+{
+  "name": "88745f54-c71b-4655-85e3-c91fe37379ce",
+  "displayName": "sim__manage_mfa_enable",
+  "scenario": {
+    "task": "I want to enable multi-factor authentication on my account to make it more secure\n\nUser Guide: Ask to enable MFA. Provide your phone number and authenticate with the OTP. Confirm you want to turn on MFA",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_e82eb546",
+      "eval_exp_7e9bf424"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "cd8b627c-78e8-4089-ba49-4aadb647a742",
+  "displayName": "sim__upgrade_tv_package_sports",
+  "scenario": {
+    "task": "I want to upgrade my TV plan to add a sports channel package\n\nUser Guide: The user wants to watch sports. They will verify their identity, ask to add sports channels, select the package, and confirm the order If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_6d18c91d"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

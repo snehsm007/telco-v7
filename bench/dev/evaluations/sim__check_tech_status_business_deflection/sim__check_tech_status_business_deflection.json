@@ -1,0 +1,19 @@
+{
+  "name": "3cb3dc40-e9ab-4e94-b13c-115ee366d860",
+  "displayName": "sim__check_tech_status_business_deflection",
+  "scenario": {
+    "task": "I want to check the technician status for my business internet line\n\nUser Guide: Provide your business account number when prompted. When the assistant detects it is a business account and explains the transfer process, accept the transfer If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_b724e612"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

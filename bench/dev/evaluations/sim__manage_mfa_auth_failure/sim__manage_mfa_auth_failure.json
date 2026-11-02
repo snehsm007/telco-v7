@@ -1,0 +1,19 @@
+{
+  "name": "b2e60dbd-4f97-40b4-b15c-97f1c14270ce",
+  "displayName": "sim__manage_mfa_auth_failure",
+  "scenario": {
+    "task": "I want to change my MFA settings but I fail the security verification\n\nUser Guide: Ask to disable MFA. When prompted for your PIN or OTP, provide incorrect codes three times. Accept the escalation to a live agent",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_26ffe360"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

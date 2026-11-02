@@ -1,0 +1,19 @@
+{
+  "name": "3f3311b6-eadc-4965-90f0-76c7c660faae",
+  "displayName": "sim__warranty_replacement_swollen_battery_french",
+  "scenario": {
+    "task": "Je veux demander un remplacement sous garantie urgent car la batterie de mon t\u00e9l\u00e9phone est gonfl\u00e9e\n\nUser Guide: The user speaks Canadian French and is concerned about a swollen battery. They will verify their identity and complete the warranty replacement process If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_40f23d7a"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

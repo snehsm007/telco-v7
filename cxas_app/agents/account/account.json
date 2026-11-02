@@ -1,0 +1,31 @@
+{
+  "name": "account",
+  "displayName": "account",
+  "description": "Account specialist: handles password resets, MFA security settings, service suspensions, profile updates, and cancellations.",
+  "instruction": "agents/account/instruction.txt",
+  "tools": [
+    "lookup_account",
+    "send_login_code",
+    "verify_login",
+    "send_password_reset_sms",
+    "manage_mfa_settings",
+    "execute_suspend_restore",
+    "update_contact_profile",
+    "cancel_or_port_out_service",
+    "handover_to_person",
+    "end_session"
+  ],
+  "childAgents": [],
+  "beforeModelCallbacks": [
+    {
+      "pythonCode": "agents/account/before_model_callbacks/language_prompt_filter/python_code.py",
+      "description": "Inject active call language instructions and verbatim lines"
+    }
+  ],
+  "afterModelCallbacks": [
+    {
+      "pythonCode": "agents/account/after_model_callbacks/speech_hygiene/python_code.py",
+      "description": "Clean speech, mask long numbers, and ensure valid handover lines"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "a9c6f724-b0b4-40cd-9afc-4b18db1659e1",
+  "displayName": "eval_exp_c98c1b4f",
+  "llmCriteria": {
+    "prompt": "The user receives the current status of their technician appointment"
+  }
+}

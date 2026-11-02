@@ -1,0 +1,91 @@
+name: Deploy to Dev (GECX)
+
+on:
+  push:
+    branches: [ main, "epic/**", "hillclimb", "build-*" ]
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Gate 1 targeted eval IDs (e.g. VE-01,VE-02)"
+        required: false
+        default: ""
+      eval_tier:
+        description: "Cloud evaluation tier (skip = offline Gate 0 only, smoke = Gate 1 targeted evals x3, unstable = Gate 1 -> Gate 2 x5, full = Gate 1 -> Gate 3 x3)"
+        type: choice
+        options: [ skip, smoke, unstable, full ]
+        default: "smoke"
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  offline-ci:
+    name: "Gate 0: Offline CI Gate"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: make install
+      - name: Run Offline CI or Self-Tests
+        run: |
+          if [ -f "cxas_app/app.json" ]; then
+            make ci
+          else
+            make selftest
+          fi
+
+  deploy-dev:
+    name: "Gate 1 -> Gate 2: Push to Staging & Targeted Evals First"
+    needs: offline-ci
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      ENV: staging
+      TARGETS: ${{ inputs.targets || vars.SMOKE_TARGETS || '' }}
+      EVAL_TIER: ${{ inputs.eval_tier || 'smoke' }}
+      WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER || vars.WIF_PROVIDER }}
+      WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT || vars.WIF_SERVICE_ACCOUNT }}
+    steps:
+      - name: Check if cloud WIF credentials and agent app exist
+        id: check_wif
+        run: |
+          if [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ] && [ -f "cxas_app/app.json" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Gate 0 Offline CI passed. Cloud push skipped because GCP_WIF_PROVIDER / GCP_WIF_SERVICE_ACCOUNT secrets are not configured yet." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check_wif.outputs.enabled == 'true'
+      - uses: astral-sh/setup-uv@v5
+        if: steps.check_wif.outputs.enabled == 'true'
+      - run: make install
+        if: steps.check_wif.outputs.enabled == 'true'
+      - uses: google-github-actions/auth@v2
+        if: steps.check_wif.outputs.enabled == 'true'
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+      - name: "Push agent to staging & climb Confidence Ladder (Targeted Gate 1 first)"
+        if: steps.check_wif.outputs.enabled == 'true'
+        run: |
+          make push ENV=staging
+          if [ "$EVAL_TIER" != "skip" ] && [ -n "$TARGETS" ]; then
+            echo "=== Gate 1: Running targeted smoke evals ($TARGETS x 3) first ==="
+            make bench-smoke ENV=staging TARGETS="$TARGETS"
+          fi
+          if [ "$EVAL_TIER" = "unstable" ]; then
+            echo "=== Gate 2: Gate 1 passed; running unstable set (x 5) ==="
+            make bench-unstable ENV=staging
+          elif [ "$EVAL_TIER" = "full" ]; then
+            echo "=== Gate 3: Gate 1 passed; running full visible suite (x 3) ==="
+            make bench-full ENV=staging
+          fi

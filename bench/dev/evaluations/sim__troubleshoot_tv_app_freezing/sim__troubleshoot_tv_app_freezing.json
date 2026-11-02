@@ -1,0 +1,19 @@
+{
+  "name": "7c9624c0-4bfc-4821-8f7f-39c9e6b20ac0",
+  "displayName": "sim__troubleshoot_tv_app_freezing",
+  "scenario": {
+    "task": "I want to fix my Fibe TV app because it keeps freezing on my streaming device\n\nUser Guide: The user explains they use the streaming app and it keeps freezing. They will verify their identity and follow steps like clearing cache or reinstalling the app If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_8fa00cbc"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

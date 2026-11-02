@@ -1,0 +1,7 @@
+{
+  "name": "106e0081-7640-4419-89a1-4c763bf32a64",
+  "displayName": "eval_exp_a75697e9",
+  "llmCriteria": {
+    "prompt": "The user is prompted to provide alternative payment details after the first card fails, resulting in a successful transaction"
+  }
+}

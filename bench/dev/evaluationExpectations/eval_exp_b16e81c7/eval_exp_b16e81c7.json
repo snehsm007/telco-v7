@@ -1,0 +1,7 @@
+{
+  "name": "768ec95e-0e83-484c-b283-4f3808af52c1",
+  "displayName": "eval_exp_b16e81c7",
+  "llmCriteria": {
+    "prompt": "The system registers the DTMF inputs correctly and confirms the payment in French"
+  }
+}

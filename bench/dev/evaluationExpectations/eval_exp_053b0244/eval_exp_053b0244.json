@@ -1,0 +1,7 @@
+{
+  "name": "48513f24-1af9-40f5-85ad-e74a3fdb1ff0",
+  "displayName": "eval_exp_053b0244",
+  "llmCriteria": {
+    "prompt": "The user is escalated to a live agent"
+  }
+}

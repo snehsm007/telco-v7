@@ -1,0 +1,19 @@
+{
+  "name": "dc75dcb4-e4af-42b8-9eaf-bf5a9340f222",
+  "displayName": "sim__setup_autopay_internet_english",
+  "scenario": {
+    "task": "I want to set up automatic monthly payments (autopay) for my home internet service so I don't miss any future bills\n\nUser Guide: The user wants a hands-off billing experience. They authenticate using their PIN and request to set up autopay with their Visa card ending in 4321",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_5d0009d7"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

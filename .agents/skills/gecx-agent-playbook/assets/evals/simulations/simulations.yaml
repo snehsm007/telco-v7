@@ -1,0 +1,42 @@
+# Simulations: an AI plays the user; a judge grades the chat; suite/grader.py
+# also checks every transcript (code checks override the judge).
+# Rules:
+#   - `tags` required (priority filters skip untagged sims)
+#   - expectations = observable behavior; describe tool calls, don't name raw function IDs
+#   - no example quotes and no "e.g." in response_guide (the sim user copies them)
+#   - max_turns = real journey length + 4-6 (much more for voice); never cap it in CI
+#   - escalation: assert the transfer in expectations; don't rely on success_criteria alone
+common_expectations:
+  - "The agent replies in the same language the user is using."
+  - "The agent never shows code, function calls, tags or internal agent names."
+  - "The agent states facts only after calling the tool that provides them."
+
+evals:
+  - name: req2_ambiguous_request_example          # REQ-2 / S-2
+    tags: [P0, REQ-2, ambiguous]
+    steps:
+      - goal: "Get <outcome> without giving <required detail> up front."
+        success_criteria: >-
+          The agent asks for the missing detail once, then gives <outcome>.
+          Receiving <outcome> counts as success.
+        response_guide: >-
+          Start vague. Give the missing detail only when asked. Answer briefly.
+        max_turns: 10
+    expectations:
+      - "The agent asks exactly one clarifying question before calling any tool."
+      - "The agent calls a tool to look up <thing> before stating <fact>."
+    session_parameters: {}
+
+  - name: req5_human_request_example              # REQ-5 / S-9
+    tags: [P0, REQ-5, human-request]
+    steps:
+      - goal: "Ask to speak to a person."
+        success_criteria: >-
+          The agent follows the escalation policy from the PRD. Being
+          transferred counts as success.
+        response_guide: >-
+          Insist once if the agent offers to help first.
+        max_turns: 8
+    expectations:
+      - "The agent does not end the conversation without telling the user what happens next."
+      - "The agent transfers to a human or offers the PRD's alternative."

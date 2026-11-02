@@ -1,0 +1,10 @@
+{
+  "name": "get_appointment_and_ticket_status",
+  "displayName": "get_appointment_and_ticket_status",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "get_appointment_and_ticket_status",
+    "description": "Retrieve technician appointment details, open repair ticket status, and available reschedule slots for the authenticated caller.",
+    "pythonCode": "tools/get_appointment_and_ticket_status/python_function/python_code.py"
+  }
+}

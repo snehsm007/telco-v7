@@ -1,0 +1,7 @@
+{
+  "name": "1c7f0104-43ff-4c71-8a09-00f3a64e3198",
+  "displayName": "eval_exp_356f38aa",
+  "llmCriteria": {
+    "prompt": "The user is immediately transferred to the fraud team without authentication"
+  }
+}

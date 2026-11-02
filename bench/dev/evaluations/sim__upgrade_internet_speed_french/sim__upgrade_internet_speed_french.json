@@ -1,0 +1,19 @@
+{
+  "name": "cc751ef1-4616-4a0d-bd75-9627e6ae0ccd",
+  "displayName": "sim__upgrade_internet_speed_french",
+  "scenario": {
+    "task": "Je veux augmenter la vitesse de ma connexion Internet r\u00e9sidentielle\n\nUser Guide: The user speaks Canadian French. They want faster home internet. They will verify their identity, choose from the options presented, and confirm the upgrade If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_d3e8aa69"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

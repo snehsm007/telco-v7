@@ -1,0 +1,19 @@
+{
+  "name": "dbe4ef2a-c5f9-44e8-b4ec-566cb54b20b7",
+  "displayName": "sim__upgrade_internet_wfh",
+  "scenario": {
+    "task": "I want to upgrade my home internet plan because I am working from home and need more reliable bandwidth\n\nUser Guide: The user explains they need better internet for working from home. They will verify their identity, listen to the options, select a high-speed tier, and confirm If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_e641e82a"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

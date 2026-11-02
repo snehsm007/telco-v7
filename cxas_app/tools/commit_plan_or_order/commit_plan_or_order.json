@@ -1,0 +1,10 @@
+{
+  "name": "commit_plan_or_order",
+  "displayName": "commit_plan_or_order",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "commit_plan_or_order",
+    "description": "Finalize and submit a plan upgrade, add-on order, or equipment order for an authenticated customer, issuing an order confirmation and sending an SMS receipt.",
+    "pythonCode": "tools/commit_plan_or_order/python_function/python_code.py"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "30bbb8d6-3dbe-4685-8120-1517fbc26948",
+  "displayName": "sim__check_outage_french_active",
+  "scenario": {
+    "task": "Je veux v\u00e9rifier s'il y a une panne de service internet dans mon secteur (code postal G1R 4A6) en fran\u00e7ais\n\nUser Guide: The user speaks French. They explain their TV and internet are down. They provide code postal G1R 4A6 and ask if there is a known issue If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_cd2287f2"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

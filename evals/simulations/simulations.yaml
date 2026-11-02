@@ -1,0 +1,17 @@
+simulations:
+  - id: sim_billing_balance_with_login_en
+    cuj: CUJ-02
+    language: en-US
+    priority: P0
+    task: >-
+      You want to check your current account balance and due date. Give your phone
+      number when asked, and read out your login code when asked.
+    max_turns: 14
+    user_facts:
+      - name: phone
+        value: "2025550143"
+      - name: login_code
+        value: "123456"
+    rubrics:
+      - "The agent logs the caller in with a code before providing billing information."
+      - "The agent states the current balance clearly."

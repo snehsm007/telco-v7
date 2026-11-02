@@ -1,0 +1,7 @@
+{
+  "name": "19d717cf-c18e-4791-a68c-631b818e06dc",
+  "displayName": "eval_exp_cb379eb1",
+  "llmCriteria": {
+    "prompt": "The user receives a payment confirmation message with the last 4 digits of their card spoken back securely"
+  }
+}

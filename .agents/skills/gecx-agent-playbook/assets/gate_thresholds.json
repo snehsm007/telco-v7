@@ -1,0 +1,27 @@
+{
+  "_comment": "Read by suite/gate.py (make gate) and scripts/bench_summary.py --gate3 (make gate3, make bench-full). Fill in measured_on_model and judge_model: until then make gate skips the model check and prints a note. Re-measure floors and update measured_on_model in the same PR whenever the agent model changes. strict_pass_rate = share of tests that pass every repeat (strict 3/3); majority_pass_rate = share that pass at least 2 of 3.",
+  "measured_on_model": "gemini-composite-v2",
+  "judge_model": "gemini-2.5-flash-lite",
+  "min_judge_agreement": 0.9,
+  "strict_pass_rate": 0.90,
+  "majority_pass_rate": 1.00,
+  "repeats": {
+    "default": 3,
+    "tool": 1,
+    "callback": 1,
+    "contract": 1
+  },
+  "must_pass_priorities": ["P0"],
+  "must_pass_tests": [],
+  "floors": {
+    "tool": 1.0,
+    "callback": 1.0,
+    "contract": 1.0,
+    "golden": 0.9,
+    "sim": 0.8,
+    "probe": 1.0,
+    "audio_golden": 0.8,
+    "audio_sim": 0.7
+  },
+  "max_infra_ratio": 0.2
+}

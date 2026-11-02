@@ -1,0 +1,10 @@
+{
+  "name": "manage_warranty_claim",
+  "displayName": "manage_warranty_claim",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "manage_warranty_claim",
+    "description": "Process warranty claims for defective equipment, prioritizing battery swelling safety hazards before authentication and screening physical or liquid damage.",
+    "pythonCode": "tools/manage_warranty_claim/python_function/python_code.py"
+  }
+}

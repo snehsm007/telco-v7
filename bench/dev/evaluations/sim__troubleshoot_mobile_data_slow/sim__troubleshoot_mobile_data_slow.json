@@ -1,0 +1,19 @@
+{
+  "name": "14ae01da-9f21-4a14-9bbc-04a2c8e70ebf",
+  "displayName": "sim__troubleshoot_mobile_data_slow",
+  "scenario": {
+    "task": "I want to fix my mobile phone because the cellular data is extremely slow and web pages won't load\n\nUser Guide: The user complains about slow data speeds. They will verify their identity and ask for help resetting their network settings or checking their data status If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_213e3030"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

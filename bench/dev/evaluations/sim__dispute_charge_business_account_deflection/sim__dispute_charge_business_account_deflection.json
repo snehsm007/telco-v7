@@ -1,0 +1,19 @@
+{
+  "name": "328e20c3-ca93-4443-8453-6ce606be21be",
+  "displayName": "sim__dispute_charge_business_account_deflection",
+  "scenario": {
+    "task": "I want to dispute a billing charge on my business account\n\nUser Guide: The user states they are calling about a business account and want to dispute a charge. When asked for account details, they mention it is a business line If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_b05cf084"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

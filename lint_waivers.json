@@ -1,0 +1,4 @@
+{
+  "_comment": "Read by scripts/lint_check.py (make lint, make ci). A cxas lint WARNING whose rule ID is listed here is printed but does not fail the build; errors always fail. Every waiver needs a reason a reviewer can check. Remove a waiver when its warning is gone.",
+  "T014": "Pre-tool pacing phrases are left out on purpose. In an earlier build, telling the model to say a filler line such as 'One moment while I check that' before a tool call made it sometimes say the line and skip the tool call (docs/WHY_IT_TOOK_SO_LONG.md, 'Pre-Tool Pacing Phrases'). The scaffold's tools answer at once from the fake backend; add a pacing phrase only to a slow tool, after a person has listened to the audio."
+}

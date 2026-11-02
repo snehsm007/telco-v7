@@ -1,0 +1,20 @@
+{
+  "name": "7b4b70ba-2482-4806-bc65-0778711fd2ba",
+  "displayName": "sim__check_tech_status_reschedule_pivot",
+  "scenario": {
+    "task": "I want to check my technician's arrival time, and if they are delayed, I want to reschedule the appointment to another day\n\nUser Guide: Speak in English. Authenticate using the OTP sent to your phone. Ask for the technician's status. Upon hearing they are delayed, ask to reschedule. Choose the second available time slot offered and confirm the new booking",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_bdf481fe",
+      "eval_exp_f0f50eb3"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

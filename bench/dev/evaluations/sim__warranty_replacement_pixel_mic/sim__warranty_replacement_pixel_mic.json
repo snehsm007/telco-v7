@@ -1,0 +1,19 @@
+{
+  "name": "a2ebb13b-9f09-4320-85b5-794cfc691598",
+  "displayName": "sim__warranty_replacement_pixel_mic",
+  "scenario": {
+    "task": "I want to request a warranty replacement for my Google Pixel because the microphone is completely dead\n\nUser Guide: The user explains the microphone is broken. They will verify their identity, confirm the device is within the warranty period, and complete the request If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_460ac573"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

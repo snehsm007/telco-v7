@@ -1,0 +1,20 @@
+{
+  "name": "20a79391-1769-4a1d-a807-f12ee3cfcab3",
+  "displayName": "sim__restore_service_french",
+  "scenario": {
+    "task": "Je veux r\u00e9tablir mon service internet suspendu\n\nUser Guide: Speak only in French Canadian. Say 'Mon service est suspendu, je veux le r\u00e9tablir.' Authenticate, pay the balance, and confirm restoration If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_5f2e69ab",
+      "eval_exp_d3c2ba90"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

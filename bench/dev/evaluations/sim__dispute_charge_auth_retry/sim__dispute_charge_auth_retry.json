@@ -1,0 +1,19 @@
+{
+  "name": "95fb5d48-fd9a-4137-8633-e28c26ff6e9e",
+  "displayName": "sim__dispute_charge_auth_retry",
+  "scenario": {
+    "task": "I want to dispute a charge on my bill, but I might make a mistake entering my PIN the first time\n\nUser Guide: The user provides their phone number. When prompted for their 4-digit PIN, they intentionally enter '9999' (incorrect). When prompted to retry, they enter the correct PIN '4321' and then proceed to dispute a $15 overcharge on their internet bill",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_ba670442"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "browse_plans_and_coverage",
+  "displayName": "browse_plans_and_coverage",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "browse_plans_and_coverage",
+    "description": "Browse curated internet, TV, or mobility plans and check 5G/Fiber coverage for a postal code or address without requiring authentication.",
+    "pythonCode": "tools/browse_plans_and_coverage/python_function/python_code.py"
+  }
+}

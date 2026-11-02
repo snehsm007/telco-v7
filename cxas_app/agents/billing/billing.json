@@ -1,0 +1,32 @@
+{
+  "name": "billing",
+  "displayName": "billing",
+  "description": "Billing specialist: handles balance, payments, payment arrangements, autopay, refunds, and dispute credits.",
+  "instruction": "agents/billing/instruction.txt",
+  "tools": [
+    "lookup_account",
+    "send_login_code",
+    "verify_login",
+    "get_billing_summary",
+    "process_bill_payment",
+    "setup_payment_arrangement",
+    "setup_autopay",
+    "process_refund_or_dispute",
+    "execute_suspend_restore",
+    "handover_to_person",
+    "end_session"
+  ],
+  "childAgents": [],
+  "beforeModelCallbacks": [
+    {
+      "pythonCode": "agents/billing/before_model_callbacks/language_prompt_filter/python_code.py",
+      "description": "Inject active call language instructions and verbatim lines"
+    }
+  ],
+  "afterModelCallbacks": [
+    {
+      "pythonCode": "agents/billing/after_model_callbacks/speech_hygiene/python_code.py",
+      "description": "Clean speech, mask long numbers, and ensure valid handover lines"
+    }
+  ]
+}

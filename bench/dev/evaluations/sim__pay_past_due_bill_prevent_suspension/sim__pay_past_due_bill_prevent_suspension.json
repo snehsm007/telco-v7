@@ -1,0 +1,19 @@
+{
+  "name": "85f562ea-c6c3-4c6e-9da8-a7caa581b9f4",
+  "displayName": "sim__pay_past_due_bill_prevent_suspension",
+  "scenario": {
+    "task": "I want to pay my past-due balance immediately to make sure my mobile service doesn't get cut off\n\nUser Guide: The user is anxious about service suspension. They provide their account details, authenticate quickly, and ask to pay the past-due balance immediately using a credit card If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_8835ab09"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

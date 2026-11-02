@@ -1,0 +1,45 @@
+# Goldens: scripted conversations for deterministic flows.
+# Rules (silent failures if broken):
+#   - every turn has `user` AND `agent`; open with <event>welcome</event> if the agent greets first
+#   - `agent` is a plain string; $matchType only inside tool_calls.args
+#   - end the golden before a transfer to a sub-agent completes
+#   - handoff = action: transfer_to_agent with args.agent
+#   - unknown keys are dropped silently: put REQ ids and priority in `tags`
+#   - use values from the oracle for anything time-dependent
+common_session_parameters:
+  # session variables the tools read, exact names from cxas_app/app.json.
+  # Leave language empty (the app.json default) so the agent detects it;
+  # never default it to "en-US".
+  language: ""
+
+conversations:
+  - conversation: req1_happy_path_example        # REQ-1 / S-1
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Hi, I'm the <brand> assistant. How can I help?"
+      - user: "<clear request for the main intent>"
+        agent: "<approximate expected reply; semantic comparison>"
+        tool_calls:
+          - action: <tool_display_name>
+            args:
+              <arg_name>: "<exact allowed value>"
+              <free_text_arg>:
+                $matchType: "semantic"
+                $matchValue: "<meaning>"
+                $originalValue: ""
+    expectations:
+      - "The agent calls the <lookup> tool before stating any <fact>."
+      - "The agent does not mention internal tool or agent names."
+    tags: [P0, REQ-1, happy]
+
+  - conversation: req1_handoff_starts_example     # REQ-1 / S-3: ends at the transfer
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Hi, I'm the <brand> assistant. How can I help?"
+      - user: "<request handled by a sub-agent>"
+        agent: ""
+        tool_calls:
+          - action: transfer_to_agent
+            args:
+              agent: <sub_agent_directory_name>
+    tags: [P0, REQ-1, routing]

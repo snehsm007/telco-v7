@@ -1,0 +1,10 @@
+{
+  "name": "verify_login",
+  "displayName": "verify_login",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "verify_login",
+    "description": "Validates the one-time login code or PIN entered by the caller to authenticate the session. Call this when the customer provides their verification code or PIN.",
+    "pythonCode": "tools/verify_login/python_function/python_code.py"
+  }
+}

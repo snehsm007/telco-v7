@@ -1,0 +1,52 @@
+name: PR Preview Cleanup
+
+on:
+  pull_request:
+    types: [ closed ]
+
+concurrency:
+  group: pr-cleanup-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Destroy Temporary GECX Preview App
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ENV: staging
+      AGENT_NAME: gecx-agent-starter
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'sneh-antigravity-test' }}
+      LOCATION: ${{ vars.GCP_LOCATION || 'us' }}
+      PR: ${{ github.event.pull_request.number }}
+      WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER || vars.WIF_PROVIDER }}
+      WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT || vars.WIF_SERVICE_ACCOUNT }}
+    steps:
+      - name: Check if cloud WIF credentials are configured
+        id: check_wif
+        run: |
+          if [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ] && [ -f "cxas_app/app.json" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check_wif.outputs.enabled == 'true'
+      - uses: astral-sh/setup-uv@v5
+        if: steps.check_wif.outputs.enabled == 'true'
+      - run: make install
+        if: steps.check_wif.outputs.enabled == 'true'
+      - uses: google-github-actions/auth@v2
+        if: steps.check_wif.outputs.enabled == 'true'
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+      - name: Delete preview app
+        if: steps.check_wif.outputs.enabled == 'true'
+        run: make preview-down PR="$PR" PROJECT_ID="$PROJECT_ID" LOCATION="$LOCATION" AGENT_NAME="$AGENT_NAME"

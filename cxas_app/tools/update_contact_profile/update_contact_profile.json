@@ -1,0 +1,10 @@
+{
+  "name": "update_contact_profile",
+  "displayName": "update_contact_profile",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "update_contact_profile",
+    "description": "Updates customer contact information such as email, billing/service address, postal code, preferred language, or notification preferences.",
+    "pythonCode": "tools/update_contact_profile/python_function/python_code.py"
+  }
+}

@@ -1,0 +1,81 @@
+name: Deploy to Staging & Full Suite Gate (Gate 3)
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Gate 1 smoke eval IDs when there is no impact map yet (e.g. VE-01,VE-02); with history/eval_impact_map.json, make smoke-impact picks them"
+        required: false
+        default: ""
+      version_tag:
+        description: "Release Tag / Version (e.g. v1.0.0)"
+        required: false
+        default: ""
+      simulation_mode:
+        description: "Evaluation tier (smoke-then-full = Gate 1 smoke then Gate 3 full, smoke-only = Gate 1 only, skip = push only)"
+        type: choice
+        options: [ smoke-then-full, smoke-only, skip ]
+        default: "smoke-then-full"
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-staging:
+    name: "Gate 0 -> Gate 1 (Targeted) -> Gate 3 (Full Suite)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      ENV: staging
+      TARGETS: ${{ inputs.targets || vars.SMOKE_TARGETS || '' }}
+      SIM_MODE: ${{ inputs.simulation_mode || 'smoke-then-full' }}
+      WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER || vars.WIF_PROVIDER }}
+      WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT || vars.WIF_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # make smoke-impact diffs against the commit of the last full run
+      - uses: astral-sh/setup-uv@v5
+      - run: make install
+      - name: "Gate 0: Offline CI"
+        run: make ci
+      - name: Authenticate to Google Cloud via WIF
+        if: env.WIF_PROVIDER != '' && env.WIF_SERVICE_ACCOUNT != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+      - name: "Push to Staging -> Gate 1 (Smoke) -> Gate 3 (Full Suite)"
+        if: env.WIF_PROVIDER != '' && env.WIF_SERVICE_ACCOUNT != ''
+        run: |
+          # make push records the pushed commit in history/last_push.json; smoke-impact and
+          # bench-full refuse to measure anything else.
+          make push ENV=staging
+          if [ "$SIM_MODE" != "skip" ]; then
+            if [ -f history/eval_impact_map.json ]; then
+              echo "=== Gate 1: smoke every evaluation this change can affect (make smoke-impact, x 3) ==="
+              if ! make smoke-impact ENV=staging; then
+                if grep -q '"verdict": "FULL"' history/last_impact.json 2>/dev/null; then
+                  echo "::notice::Gate 1 skipped: the change affects every evaluation (impact verdict FULL), so the full suite decides."
+                else
+                  exit 1
+                fi
+              fi
+            elif [ -n "$TARGETS" ]; then
+              echo "=== Gate 1: no impact map yet; running targeted smoke evals ($TARGETS x 3) ==="
+              make bench-smoke ENV=staging TARGETS="$TARGETS"
+            fi
+          fi
+          if [ "$SIM_MODE" = "smoke-then-full" ]; then
+            echo "=== Gate 3: running the full suite (x 3) ==="
+            make bench-full ENV=staging
+          fi
+      - name: "Gate 3 verdict: strict 3/3 >= 90%, 100% majority, 0 tool errors (make gate3)"
+        if: env.WIF_PROVIDER != '' && env.WIF_SERVICE_ACCOUNT != '' && env.SIM_MODE == 'smoke-then-full'
+        run: make gate3

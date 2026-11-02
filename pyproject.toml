@@ -1,0 +1,26 @@
+[project]
+name = "gecx-agent"
+version = "0.1.0"
+description = "A CX Agent Studio (CXAS / GECX) agent built with the gecx-agent-starter kit"
+requires-python = ">=3.11"
+# Pin the SDK: evaluation protos, CLI flags and lint rules change between SCRAPI releases.
+# Bump both pins together and re-run `make ci` + one `make bench-smoke`.
+dependencies = [
+    "cxas-scrapi==1.9.1",
+    "google-cloud-ces==0.7.1",
+    "pyyaml>=6.0",
+    "pytest>=8",
+    "pytest-cov>=5",
+]
+
+[tool.uv]
+# This repo is an application, not a library: `uv sync` installs the dependencies only.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.coverage.run]
+omit = ["tests/*", "suite/*", "scripts/*", "*/__init__.py"]

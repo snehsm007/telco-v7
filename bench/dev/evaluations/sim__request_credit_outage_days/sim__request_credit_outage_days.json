@@ -1,0 +1,19 @@
+{
+  "name": "4213f10c-a27c-483e-8cd8-ae7a6bf25b5d",
+  "displayName": "sim__request_credit_outage_days",
+  "scenario": {
+    "task": "I want to request a credit on my account for the three days my internet was down during last week's outage\n\nUser Guide: The user is firm but reasonable. They explain that their internet was completely down for three days and they want a credit. They authenticate using their account number and PIN",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_3828d2fa"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

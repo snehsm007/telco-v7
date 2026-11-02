@@ -1,0 +1,10 @@
+{
+  "name": "process_refund_or_dispute",
+  "displayName": "process_refund_or_dispute",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "process_refund_or_dispute",
+    "description": "Processes a credit adjustment, duplicate payment refund, or fee dispute for the customer.",
+    "pythonCode": "tools/process_refund_or_dispute/python_function/python_code.py"
+  }
+}

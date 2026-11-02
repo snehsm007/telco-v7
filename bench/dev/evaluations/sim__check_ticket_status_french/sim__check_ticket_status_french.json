@@ -1,0 +1,20 @@
+{
+  "name": "d06b58fb-0e59-45a9-a7d2-2357c52c4841",
+  "displayName": "sim__check_ticket_status_french",
+  "scenario": {
+    "task": "Je veux v\u00e9rifier le statut de mon billet de d\u00e9rangement pour ma t\u00e9l\u00e9vision qui ne fonctionne plus\n\nUser Guide: Speak only in French Canadian. Provide your account number when asked. Enter your 4-digit PIN to authenticate. Ask about your ticket status ('statut de mon billet') and thank the assistant once the status is provided",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_5f2e69ab",
+      "eval_exp_02ddcd15"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,51 @@
+# Tool tests: call one tool directly and check its output.
+# Rules: top-level key `tests:` (`test_cases:` silently loads 0 tests);
+# `tool:` = display name; response paths start with `$.result.`;
+# read the tool's return statements before writing paths.
+# Every tool replies with `status`, `data`, `error_message`, `tracking_id`;
+# errors add `error` (a code from ERROR_CODES in lib/replies.py) and `agent_action`.
+# Operators: equals, contains, greater_than, less_than, length_equals,
+# length_greater_than, length_less_than, is_null, is_not_null.
+# One test per allowed value of every enum-like argument, plus every error code,
+# plus one per field, allowed value and timeline the PRD requires.
+tests:
+  - name: <tool>_happy_path
+    tool: <tool_display_name>
+    args:
+      <arg_name>: "<allowed value>"
+    variables: {}            # session state the tool reads
+    expectations:
+      response:
+        - path: "$.result.status"
+          operator: equals
+          value: "ok"
+        - path: "$.result.data"
+          operator: is_not_null
+
+  - name: <tool>_not_found
+    tool: <tool_display_name>
+    args:
+      <arg_name>: "<unknown value>"
+    expectations:
+      response:
+        - path: "$.result.status"
+          operator: equals
+          value: "error"
+        - path: "$.result.error"
+          operator: equals
+          value: "NOT_FOUND"
+
+  - name: <tool>_prd_contract            # REQ-n: fields, enums and timelines the PRD fixes
+    tool: <tool_display_name>
+    args:
+      <arg_name>: "<allowed value>"
+    expectations:
+      response:
+        - path: "$.result.data.<required_field>"
+          operator: equals
+          value: "<value the PRD requires>"
+        - path: "$.result.data.amount_display"   # money: number + 2-decimal string + currency
+          operator: equals
+          value: "<amount with 2 decimals>"
+        - path: "$.result.data.currency"
+          operator: is_not_null

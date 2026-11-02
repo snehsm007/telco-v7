@@ -1,0 +1,7 @@
+{
+  "name": "1c75cc20-d6eb-40cf-afc6-fc93c064ae51",
+  "displayName": "eval_exp_5c828f08",
+  "llmCriteria": {
+    "prompt": "The user receives a password reset link via SMS"
+  }
+}

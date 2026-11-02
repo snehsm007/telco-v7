@@ -1,0 +1,19 @@
+{
+  "name": "43f9faff-8889-4485-93c1-47bc44f23fd7",
+  "displayName": "sim__cancel_tv_service_english",
+  "scenario": {
+    "task": "I want to cancel my Fibe TV subscription because I am switching to streaming-only\n\nUser Guide: Tell the agent you want to cancel your TV service. Provide your account number and PIN to authenticate. Listen to the contract disclosure and confirm you want to cancel",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_6793b8d6"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

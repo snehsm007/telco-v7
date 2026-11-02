@@ -1,0 +1,10 @@
+{
+  "name": "setup_payment_arrangement",
+  "displayName": "setup_payment_arrangement",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "setup_payment_arrangement",
+    "description": "Establishes a formal payment arrangement with installment payments and extended due date, and restores suspended service if applicable.",
+    "pythonCode": "tools/setup_payment_arrangement/python_function/python_code.py"
+  }
+}

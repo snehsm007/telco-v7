@@ -1,0 +1,19 @@
+{
+  "name": "2a183a33-bec2-47e1-9568-afcf787d3139",
+  "displayName": "sim__transfer_family_member_number",
+  "scenario": {
+    "task": "I want to transfer my daughter's phone number from her current provider to my Bell family plan\n\nUser Guide: The user wants to add a line by porting a number. They will verify their identity, provide the external number and account details, and complete the transfer request If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_a7db4236"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "2566b2f8-67df-4749-ab48-89d25d58cb94",
+  "displayName": "Default Prompt Guardrail",
+  "enabled": true,
+  "action": {
+    "generativeAnswer": {
+      "prompt": "Respond strictly in the exact same language the caller is speaking in the conversation (for example French if the caller spoke French, Spanish if Spanish, or English if English; never reply in English on a French or Spanish call). In one brief, polite sentence in the caller's language, apologize and ask them to rephrase their request or share their account details so you can help."
+    }
+  },
+  "llmPromptSecurity": {
+    "defaultSettings": {}
+  }
+}

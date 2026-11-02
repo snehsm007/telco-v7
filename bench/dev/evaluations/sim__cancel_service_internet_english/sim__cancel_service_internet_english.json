@@ -1,0 +1,19 @@
+{
+  "name": "4fe7a9dd-96f2-4c17-b92e-07caa5e4d26c",
+  "displayName": "sim__cancel_service_internet_english",
+  "scenario": {
+    "task": "I want to cancel my home internet service because I am moving out of the country\n\nUser Guide: Tell the agent you need to cancel your internet service. Provide your phone number and PIN when asked to authenticate. Listen to the contract terms and confirm you want to proceed with the cancellation",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_aa6c2b86"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

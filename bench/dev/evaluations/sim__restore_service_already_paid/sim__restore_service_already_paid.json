@@ -1,0 +1,20 @@
+{
+  "name": "181665cb-405e-4f1f-80dd-c9c6b43a51f1",
+  "displayName": "sim__restore_service_already_paid",
+  "scenario": {
+    "task": "I already paid my past-due bill yesterday, but my service is still suspended. I want to get it turned back on\n\nUser Guide: Say 'My service is suspended but I already paid my bill.' Authenticate. Confirm you paid yesterday. Wait for the system to verify and restore your service If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_e82eb546",
+      "eval_exp_f3b507e4"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

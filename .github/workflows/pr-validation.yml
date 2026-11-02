@@ -1,0 +1,138 @@
+name: PR Validation Gate
+
+on:
+  pull_request:
+    branches: [ main, "release/**", "epic/**", "hillclimb", "build-*" ]
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Gate 1 targeted eval IDs (e.g. VE-01,VE-02)"
+        required: false
+        default: ""
+      eval_tier:
+        description: "Cloud evaluation tier after Gate 0 (smoke = targeted only, unstable = Gate 1 -> Gate 2, full = Gate 1 -> Gate 3)"
+        type: choice
+        options: [ smoke, unstable, full ]
+        default: "smoke"
+
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Gate 0: Offline Code Quality Gate (bundle-check, overfit-check, lint, test)
+  # ----------------------------------------------------------------------------
+  ci-gate:
+    name: "Gate 0: Offline CI Code Quality"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python & uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Run Offline CI Gate (make ci or make selftest on template repo)
+        run: |
+          if [ -f "cxas_app/app.json" ]; then
+            make ci
+          else
+            make selftest
+          fi
+
+      - name: Publish CI Validation Summary
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REF_NAME: ${{ github.head_ref || github.ref }}
+        run: |
+          echo "### Gate 0: Offline CI Code Quality Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Target | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Shared Library Bundle | \`make bundle-check\` | Verified |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| CXAS Structural Lint | \`make lint\` | Verified |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pytest + >=80% Coverage | \`make test\` | Verified |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite Self-Tests | \`make selftest\` | Verified |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: \`${COMMIT_SHA}\` on \`${REF_NAME}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ----------------------------------------------------------------------------
+  # Gate 1 -> Gate 2: Ephemeral PR Preview & Targeted Smoke First
+  # ----------------------------------------------------------------------------
+  preview:
+    name: "Gate 1: PR Preview & Targeted Smoke First"
+    needs: ci-gate
+    if: (github.event_name == 'pull_request' && github.event.action != 'closed') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    env:
+      ENV: staging
+      AGENT_NAME: gecx-agent-starter
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'sneh-antigravity-test' }}
+      LOCATION: ${{ vars.GCP_LOCATION || 'us' }}
+      PR: ${{ github.event.pull_request.number || 'dispatch' }}
+      TARGETS: ${{ inputs.targets || vars.SMOKE_TARGETS || '' }}
+      EVAL_TIER: ${{ inputs.eval_tier || 'smoke' }}
+      WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER || vars.WIF_PROVIDER }}
+      WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT || vars.WIF_SERVICE_ACCOUNT }}
+    steps:
+      - name: Check if cloud WIF credentials and agent app exist
+        id: check_wif
+        run: |
+          if [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ] && [ -f "cxas_app/app.json" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping cloud preview deployment: configure GCP_WIF_PROVIDER and GCP_WIF_SERVICE_ACCOUNT secrets (via python3 bootstrap/bootstrap.py) to enable live PR preview apps." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Checkout repository
+        if: steps.check_wif.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python & uv
+        if: steps.check_wif.outputs.enabled == 'true'
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        if: steps.check_wif.outputs.enabled == 'true'
+        run: make install
+
+      - name: Authenticate to Google Cloud via WIF
+        if: steps.check_wif.outputs.enabled == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - name: Provision or update ephemeral PR preview app
+        if: steps.check_wif.outputs.enabled == 'true'
+        run: |
+          make preview-up PR="$PR" PROJECT_ID="$PROJECT_ID" LOCATION="$LOCATION" AGENT_NAME="$AGENT_NAME"
+
+      - name: "Gate 1: Run Targeted Smoke Evals First (~4 min, 3 repeats)"
+        if: steps.check_wif.outputs.enabled == 'true' && env.TARGETS != ''
+        run: |
+          make bench-smoke ENV=staging APP="$(cat .preview_app)" TARGETS="$TARGETS"
+
+      - name: "Gate 2 / Gate 3: Escalate to Unstable or Full Suite only after Gate 1 passes"
+        if: steps.check_wif.outputs.enabled == 'true' && (env.EVAL_TIER == 'unstable' || env.EVAL_TIER == 'full')
+        run: |
+          if [ "$EVAL_TIER" = "unstable" ]; then
+            make bench-unstable ENV=staging APP="$(cat .preview_app)"
+          elif [ "$EVAL_TIER" = "full" ]; then
+            make bench-full ENV=staging APP="$(cat .preview_app)"
+          fi

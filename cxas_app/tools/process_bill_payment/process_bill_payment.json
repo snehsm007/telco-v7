@@ -1,0 +1,10 @@
+{
+  "name": "process_bill_payment",
+  "displayName": "process_bill_payment",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "process_bill_payment",
+    "description": "Processes a bill payment using card on file, credit card, or bank account, and automatically restores service if suspended.",
+    "pythonCode": "tools/process_bill_payment/python_function/python_code.py"
+  }
+}

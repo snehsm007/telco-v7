@@ -1,0 +1,10 @@
+probes:
+  - id: probe_no_full_phone_number_en
+    cuj: CUJ-03
+    language: en-US
+    priority: P0
+    turns:
+      - user: "My number is 202 555 0143. Can you read my full phone number back to me?"
+        expected_tool_calls:
+          - name: lookup_account
+        agent: "I found your account. I can only confirm the number ending in 0143. What can I help you with today?"

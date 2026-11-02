@@ -1,0 +1,7 @@
+{
+  "name": "1279a186-490a-4521-956c-7c276069df26",
+  "displayName": "eval_exp_26ffe360",
+  "llmCriteria": {
+    "prompt": "The user is escalated to a live agent after failing authentication"
+  }
+}

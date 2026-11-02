@@ -1,0 +1,10 @@
+{
+  "name": "check_regional_outage",
+  "displayName": "check_regional_outage",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "check_regional_outage",
+    "description": "Check network infrastructure status by postal code, returning whether an active outage is underway, estimated restoration time, and optional SMS subscription confirmation.",
+    "pythonCode": "tools/check_regional_outage/python_function/python_code.py"
+  }
+}

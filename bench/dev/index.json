@@ -1,0 +1,422 @@
+[
+  {
+    "id": "VE-01",
+    "name": "sim__cancel_home_phone_french",
+    "topic": "cancel_or_port_out",
+    "language": "fr"
+  },
+  {
+    "id": "VE-02",
+    "name": "sim__cancel_service_mobility_french",
+    "topic": "cancel_or_port_out",
+    "language": "fr"
+  },
+  {
+    "id": "VE-03",
+    "name": "sim__check_outage_active_postal_code",
+    "topic": "outage_check",
+    "language": "en"
+  },
+  {
+    "id": "VE-04",
+    "name": "sim__check_outage_none_found_sms_troubleshoot",
+    "topic": "outage_check",
+    "language": "en"
+  },
+  {
+    "id": "VE-05",
+    "name": "sim__check_tech_status_business_deflection",
+    "topic": "technician_or_ticket_status",
+    "language": "en"
+  },
+  {
+    "id": "VE-06",
+    "name": "sim__check_tech_status_reschedule_pivot",
+    "topic": "technician_or_ticket_status",
+    "language": "en"
+  },
+  {
+    "id": "VE-07",
+    "name": "sim__check_tech_status_standard",
+    "topic": "technician_or_ticket_status",
+    "language": "en"
+  },
+  {
+    "id": "VE-08",
+    "name": "sim__check_ticket_status_retry_strikes",
+    "topic": "technician_or_ticket_status",
+    "language": "en"
+  },
+  {
+    "id": "VE-09",
+    "name": "sim__dispute_charge_auth_retry",
+    "topic": "dispute_refund_credit",
+    "language": "en"
+  },
+  {
+    "id": "VE-10",
+    "name": "sim__dispute_charge_business_account_deflection",
+    "topic": "dispute_refund_credit",
+    "language": "en"
+  },
+  {
+    "id": "VE-11",
+    "name": "sim__dispute_unrecognized_streaming_charge",
+    "topic": "dispute_refund_credit",
+    "language": "en"
+  },
+  {
+    "id": "VE-12",
+    "name": "sim__manage_mfa_auth_failure",
+    "topic": "two_step_login_mfa",
+    "language": "en"
+  },
+  {
+    "id": "VE-13",
+    "name": "sim__manage_mfa_disable",
+    "topic": "two_step_login_mfa",
+    "language": "en"
+  },
+  {
+    "id": "VE-14",
+    "name": "sim__manage_mfa_enable",
+    "topic": "two_step_login_mfa",
+    "language": "en"
+  },
+  {
+    "id": "VE-15",
+    "name": "sim__manage_mfa_french_disable",
+    "topic": "two_step_login_mfa",
+    "language": "fr"
+  },
+  {
+    "id": "VE-16",
+    "name": "sim__pay_bill_french_keypad",
+    "topic": "pay_bill",
+    "language": "fr"
+  },
+  {
+    "id": "VE-17",
+    "name": "sim__pay_mobility_bill_card_file",
+    "topic": "pay_bill",
+    "language": "en"
+  },
+  {
+    "id": "VE-18",
+    "name": "sim__pay_past_due_bill_prevent_suspension",
+    "topic": "pay_bill",
+    "language": "en"
+  },
+  {
+    "id": "VE-19",
+    "name": "sim__port_out_number_english",
+    "topic": "cancel_or_port_out",
+    "language": "en"
+  },
+  {
+    "id": "VE-20",
+    "name": "sim__report_fraud_mid_call_switch",
+    "topic": "fraud",
+    "language": "en"
+  },
+  {
+    "id": "VE-21",
+    "name": "sim__report_fraud_phishing",
+    "topic": "fraud",
+    "language": "en"
+  },
+  {
+    "id": "VE-22",
+    "name": "sim__report_fraud_sim_swap",
+    "topic": "fraud",
+    "language": "en"
+  },
+  {
+    "id": "VE-23",
+    "name": "sim__report_fraud_standard",
+    "topic": "fraud",
+    "language": "en"
+  },
+  {
+    "id": "VE-24",
+    "name": "sim__request_refund_exceeding_threshold_escalation",
+    "topic": "dispute_refund_credit",
+    "language": "en"
+  },
+  {
+    "id": "VE-25",
+    "name": "sim__request_refund_overcharge_french",
+    "topic": "dispute_refund_credit",
+    "language": "fr"
+  },
+  {
+    "id": "VE-26",
+    "name": "sim__reset_password_sms_escalation",
+    "topic": "password_reset",
+    "language": "en"
+  },
+  {
+    "id": "VE-27",
+    "name": "sim__reset_password_standard",
+    "topic": "password_reset",
+    "language": "en"
+  },
+  {
+    "id": "VE-28",
+    "name": "sim__reset_password_wrong_number_retry",
+    "topic": "password_reset",
+    "language": "en"
+  },
+  {
+    "id": "VE-29",
+    "name": "sim__restore_service_already_paid",
+    "topic": "restore_service",
+    "language": "en"
+  },
+  {
+    "id": "VE-30",
+    "name": "sim__restore_service_payment_arrangement",
+    "topic": "restore_service",
+    "language": "en"
+  },
+  {
+    "id": "VE-31",
+    "name": "sim__restore_service_standard",
+    "topic": "restore_service",
+    "language": "en"
+  },
+  {
+    "id": "VE-32",
+    "name": "sim__setup_autopay_french",
+    "topic": "autopay",
+    "language": "fr"
+  },
+  {
+    "id": "VE-33",
+    "name": "sim__setup_autopay_internet_english",
+    "topic": "autopay",
+    "language": "en"
+  },
+  {
+    "id": "VE-34",
+    "name": "sim__speak_immediate_english",
+    "topic": "talk_to_a_person",
+    "language": "en"
+  },
+  {
+    "id": "VE-35",
+    "name": "sim__speak_immediate_french",
+    "topic": "talk_to_a_person",
+    "language": "fr"
+  },
+  {
+    "id": "VE-36",
+    "name": "sim__speak_mid_call_billing_english",
+    "topic": "talk_to_a_person",
+    "language": "en"
+  },
+  {
+    "id": "VE-37",
+    "name": "sim__speak_mid_call_tech_french",
+    "topic": "talk_to_a_person",
+    "language": "fr"
+  },
+  {
+    "id": "VE-38",
+    "name": "sim__transfer_landline_mobile_french",
+    "topic": "move_number_in",
+    "language": "fr"
+  },
+  {
+    "id": "VE-39",
+    "name": "sim__transfer_number_competitor",
+    "topic": "move_number_in",
+    "language": "en"
+  },
+  {
+    "id": "VE-40",
+    "name": "sim__troubleshoot_mobile_data_slow",
+    "topic": "troubleshooting",
+    "language": "en"
+  },
+  {
+    "id": "VE-41",
+    "name": "sim__troubleshoot_mobile_service_french",
+    "topic": "troubleshooting",
+    "language": "fr"
+  },
+  {
+    "id": "VE-42",
+    "name": "sim__troubleshoot_satellite_tv_error",
+    "topic": "troubleshooting",
+    "language": "en"
+  },
+  {
+    "id": "VE-43",
+    "name": "sim__troubleshoot_tv_app_freezing",
+    "topic": "troubleshooting",
+    "language": "en"
+  },
+  {
+    "id": "VE-44",
+    "name": "sim__upgrade_internet_speed_french",
+    "topic": "upgrade",
+    "language": "fr"
+  },
+  {
+    "id": "VE-45",
+    "name": "sim__upgrade_internet_wfh",
+    "topic": "upgrade",
+    "language": "en"
+  },
+  {
+    "id": "VE-46",
+    "name": "sim__upgrade_mobile_plan_budget",
+    "topic": "upgrade",
+    "language": "en"
+  },
+  {
+    "id": "VE-47",
+    "name": "sim__warranty_replacement_check_status",
+    "topic": "warranty",
+    "language": "en"
+  },
+  {
+    "id": "VE-48",
+    "name": "sim__warranty_replacement_iphone_screen",
+    "topic": "warranty",
+    "language": "en"
+  },
+  {
+    "id": "VE-49",
+    "name": "sim__warranty_replacement_samsung_french",
+    "topic": "warranty",
+    "language": "fr"
+  },
+  {
+    "id": "VE-50",
+    "name": "sim__warranty_replacement_swollen_battery_french",
+    "topic": "warranty",
+    "language": "fr"
+  },
+  {
+    "id": "VE-51",
+    "name": "sim__cancel_service_internet_english",
+    "topic": "cancel_or_port_out",
+    "language": "en"
+  },
+  {
+    "id": "VE-52",
+    "name": "sim__cancel_tv_service_english",
+    "topic": "cancel_or_port_out",
+    "language": "en"
+  },
+  {
+    "id": "VE-53",
+    "name": "sim__check_outage_french_active",
+    "topic": "outage_check",
+    "language": "fr"
+  },
+  {
+    "id": "VE-54",
+    "name": "sim__check_ticket_status_french",
+    "topic": "technician_or_ticket_status",
+    "language": "fr"
+  },
+  {
+    "id": "VE-55",
+    "name": "sim__dispute_billing_charge_french",
+    "topic": "dispute_refund_credit",
+    "language": "fr"
+  },
+  {
+    "id": "VE-56",
+    "name": "sim__manage_mfa_pivot_tech",
+    "topic": "two_step_login_mfa",
+    "language": "en"
+  },
+  {
+    "id": "VE-57",
+    "name": "sim__pay_bill_declined_card_retry",
+    "topic": "pay_bill",
+    "language": "en"
+  },
+  {
+    "id": "VE-58",
+    "name": "sim__report_fraud_french",
+    "topic": "fraud",
+    "language": "fr"
+  },
+  {
+    "id": "VE-59",
+    "name": "sim__request_credit_outage_days",
+    "topic": "dispute_refund_credit",
+    "language": "en"
+  },
+  {
+    "id": "VE-60",
+    "name": "sim__reset_password_french",
+    "topic": "password_reset",
+    "language": "fr"
+  },
+  {
+    "id": "VE-61",
+    "name": "sim__reset_password_pivot_billing",
+    "topic": "password_reset",
+    "language": "en"
+  },
+  {
+    "id": "VE-62",
+    "name": "sim__restore_service_business_deflection",
+    "topic": "restore_service",
+    "language": "en"
+  },
+  {
+    "id": "VE-63",
+    "name": "sim__restore_service_french",
+    "topic": "restore_service",
+    "language": "fr"
+  },
+  {
+    "id": "VE-64",
+    "name": "sim__setup_autopay_after_paying_bill",
+    "topic": "autopay",
+    "language": "en"
+  },
+  {
+    "id": "VE-65",
+    "name": "sim__speak_frustrated_english",
+    "topic": "talk_to_a_person",
+    "language": "en"
+  },
+  {
+    "id": "VE-66",
+    "name": "sim__transfer_family_member_number",
+    "topic": "move_number_in",
+    "language": "en"
+  },
+  {
+    "id": "VE-67",
+    "name": "sim__troubleshoot_tv_signal",
+    "topic": "troubleshooting",
+    "language": "en"
+  },
+  {
+    "id": "VE-68",
+    "name": "sim__upgrade_mobile_plan_data",
+    "topic": "upgrade",
+    "language": "en"
+  },
+  {
+    "id": "VE-69",
+    "name": "sim__upgrade_tv_package_sports",
+    "topic": "upgrade",
+    "language": "en"
+  },
+  {
+    "id": "VE-70",
+    "name": "sim__warranty_replacement_pixel_mic",
+    "topic": "warranty",
+    "language": "en"
+  }
+]

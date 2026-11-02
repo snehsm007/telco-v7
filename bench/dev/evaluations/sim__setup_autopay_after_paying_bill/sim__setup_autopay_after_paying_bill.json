@@ -1,0 +1,19 @@
+{
+  "name": "f5f61fc8-42f9-46b0-bdb9-bb2f0b7c812d",
+  "displayName": "sim__setup_autopay_after_paying_bill",
+  "scenario": {
+    "task": "I want to pay my current bill first, and then immediately set up autopay so I don't have to call back next month\n\nUser Guide: The user authenticates, pays their current balance, and then says, 'Now that that's paid, can we set up autopay so this happens automatically next month?' If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_e859ee0c"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

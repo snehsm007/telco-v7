@@ -1,0 +1,7 @@
+{
+  "name": "fdc808be-4766-4946-9d35-60e747cfa85b",
+  "displayName": "eval_exp_8e8ed2c1",
+  "llmCriteria": {
+    "prompt": "The user is informed that the request requires specialist approval and is transferred with the verbatim transfer_to_specialist message"
+  }
+}

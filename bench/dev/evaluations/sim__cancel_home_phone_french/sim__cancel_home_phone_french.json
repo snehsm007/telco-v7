@@ -1,0 +1,19 @@
+{
+  "name": "810b3b45-7172-45a1-a753-903afee247c1",
+  "displayName": "sim__cancel_home_phone_french",
+  "scenario": {
+    "task": "I want to cancel my residential landline phone service in French\n\nUser Guide: Say 'Je veux annuler ma ligne r\u00e9sidentielle'. Provide your phone number and PIN when prompted. Listen to the French contract disclosure and confirm",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_e50e1d40"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

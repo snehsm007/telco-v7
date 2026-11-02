@@ -1,0 +1,19 @@
+{
+  "name": "c1881f17-7e01-409c-95a1-fef5a05b314f",
+  "displayName": "sim__pay_mobility_bill_card_file",
+  "scenario": {
+    "task": "I want to pay my outstanding mobility bill balance using the credit card I have saved on my account\n\nUser Guide: The user is ready to pay. They provide their phone number, authenticate via SMS OTP, ask for their current balance, and agree to pay the full amount using their card on file",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_cb379eb1"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "5c3710ec-6a79-4861-b907-9eb7320e77db",
+  "displayName": "sim__pay_bill_french_keypad",
+  "scenario": {
+    "task": "Je veux payer ma facture internet r\u00e9sidentielle en utilisant le clavier de mon t\u00e9l\u00e9phone pour entrer mes informations en fran\u00e7ais\n\nUser Guide: The user speaks French. They prefer to use their phone keypad (DTMF) to enter their account number and PIN when prompted, then confirm they want to pay their balance",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_b16e81c7"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "de629880-2694-4b52-b3b9-9f39376b9046",
+  "displayName": "sim__manage_mfa_french_disable",
+  "scenario": {
+    "task": "Je veux d\u00e9sactiver l'authentification multifacteur sur mon compte\n\nUser Guide: Speak only in French Canadian. Ask to disable MFA. Authenticate with your PIN and confirm the change",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_5f2e69ab",
+      "eval_exp_0c33daf9"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

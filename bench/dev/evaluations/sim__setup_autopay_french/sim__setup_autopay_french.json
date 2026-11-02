@@ -1,0 +1,19 @@
+{
+  "name": "d51b5724-06de-488f-86a3-9d895874bb3e",
+  "displayName": "sim__setup_autopay_french",
+  "scenario": {
+    "task": "Je veux configurer les paiements pr\u00e9autoris\u00e9s (autopay) sur mon compte de mobilit\u00e9 en fran\u00e7ais\n\nUser Guide: The user initiates the call in French, authenticates with their PIN, and requests to set up pre-authorized payments using their bank account or credit card",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_da1de17d"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

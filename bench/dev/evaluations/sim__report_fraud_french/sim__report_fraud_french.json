@@ -1,0 +1,20 @@
+{
+  "name": "48629dbb-b7ed-4f73-8f78-c1b5b4c0c582",
+  "displayName": "sim__report_fraud_french",
+  "scenario": {
+    "task": "Je veux signaler une fraude sur mon compte\n\nUser Guide: Speak only in French Canadian. Say 'Quelqu'un a pirat\u00e9 mon compte' (Someone hacked my account). Accept the transfer If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_5f2e69ab",
+      "eval_exp_907c390b"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

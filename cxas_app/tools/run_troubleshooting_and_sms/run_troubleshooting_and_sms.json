@@ -1,0 +1,10 @@
+{
+  "name": "run_troubleshooting_and_sms",
+  "displayName": "run_troubleshooting_and_sms",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "run_troubleshooting_and_sms",
+    "description": "Run technical diagnostics for internet, TV, or mobility issues, send a remote network refresh signal, and send self-service troubleshooting steps via SMS.",
+    "pythonCode": "tools/run_troubleshooting_and_sms/python_function/python_code.py"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "initiate_number_transfer",
+  "displayName": "initiate_number_transfer",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "initiate_number_transfer",
+    "description": "Provide carrier port-in checklist requirements or submit an authorized mobile/landline number transfer request.",
+    "pythonCode": "tools/initiate_number_transfer/python_function/python_code.py"
+  }
+}

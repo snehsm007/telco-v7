@@ -1,0 +1,10 @@
+{
+  "name": "manage_appointment",
+  "displayName": "manage_appointment",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "manage_appointment",
+    "description": "Reschedule or cancel an existing technician appointment, enforcing en-route dispatch protection and explicit confirmation before cancellation.",
+    "pythonCode": "tools/manage_appointment/python_function/python_code.py"
+  }
+}

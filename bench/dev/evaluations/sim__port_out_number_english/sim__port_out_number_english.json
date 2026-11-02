@@ -1,0 +1,19 @@
+{
+  "name": "7f07cbd2-ac3e-4bf8-b967-4b408f5efd11",
+  "displayName": "sim__port_out_number_english",
+  "scenario": {
+    "task": "I want to port my mobile number out to another carrier, which requires cancelling my current line\n\nUser Guide: Tell the agent you want to port out your number. Provide your authentication details when prompted. Listen to the contract disclosure and confirm If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_33222b29"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

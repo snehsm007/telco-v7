@@ -1,0 +1,12 @@
+goldens:
+  - id: golden_identify_and_route_en
+    cuj: CUJ-01
+    language: en-US
+    priority: P0
+    turns:
+      - user: "Hi there."
+        agent: "This call may be recorded for quality and training purposes. Welcome to Telco. I can help with billing, technical support, or managing your account. To get started, could you tell me the phone number or account number associated with your service?"
+      - user: "It's 202 555 0143."
+        expected_tool_calls:
+          - name: lookup_account
+        agent: "I found your account ending in 0143. What can I help you with today?"

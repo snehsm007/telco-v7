@@ -1,0 +1,7 @@
+{
+  "name": "8b535d36-8c62-4727-b831-50554c11d911",
+  "displayName": "eval_exp_ba670442",
+  "llmCriteria": {
+    "prompt": "The user is allowed to retry authentication and successfully disputes the charge after a successful second attempt"
+  }
+}

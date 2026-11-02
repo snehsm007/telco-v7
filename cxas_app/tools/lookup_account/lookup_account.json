@@ -1,0 +1,10 @@
+{
+  "name": "lookup_account",
+  "displayName": "lookup_account",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "lookup_account",
+    "description": "Finds the caller's account from the phone number, account number, or full name they gave. Call this as soon as the caller gives a phone number, account number, or full name.",
+    "pythonCode": "tools/lookup_account/python_function/python_code.py"
+  }
+}

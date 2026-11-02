@@ -1,0 +1,117 @@
+tests:
+  - id: tt_lookup_account_found
+    tool: lookup_account
+    args:
+      identifier: "202 555 0143"
+    expected_status: ok
+    expected_fields:
+      first_name: Jordan
+      phone_last4: "0143"
+    expected_state:
+      account_id: A1001
+    forbidden_substrings:
+      - "2025550143"
+  - id: tt_lookup_account_not_found
+    tool: lookup_account
+    args:
+      identifier: "123"
+    expected_status: error
+    expected_error: NOT_FOUND
+  - id: tt_send_login_code_masks_the_destination
+    tool: send_login_code
+    args: {}
+    initial_state:
+      account_id: A1001
+      phone_last4: "0143"
+      auth_status: none
+      auth_failure_count: 0
+    expected_status: ok
+    expected_fields:
+      sent: true
+      destination_last4: "0143"
+    expected_state:
+      auth_status: code_sent
+  - id: tt_verify_login_wrong_code
+    tool: verify_login
+    args:
+      code: "999999"
+    initial_state:
+      account_id: A1001
+      auth_status: code_sent
+      auth_failure_count: 0
+    expected_status: error
+    expected_error: WRONG_CODE
+    expected_state:
+      auth_failure_count: 1
+  - id: tt_verify_login_placeholder_code
+    tool: verify_login
+    args:
+      code: "000000"
+    initial_state:
+      account_id: A1001
+      auth_status: code_sent
+      auth_failure_count: 0
+    expected_status: error
+    expected_error: CODE_NOT_RECEIVED
+    expected_state:
+      auth_failure_count: 0
+  - id: tt_verify_login_pin_ok
+    tool: verify_login
+    args:
+      code: "1234"
+    initial_state:
+      account_id: A1001
+      auth_status: none
+      pin_failure_count: 0
+    expected_status: ok
+    expected_fields:
+      verified: true
+    expected_state:
+      auth_status: pass
+  - id: tt_get_billing_summary_after_login
+    tool: get_billing_summary
+    args: {}
+    setup:
+      - tool: lookup_account
+        args:
+          identifier: "202 555 0143"
+        expected_fields:
+          first_name: Jordan
+      - tool: send_login_code
+        args: {}
+        expected_fields:
+          sent: true
+      - tool: verify_login
+        args:
+          code: "123456"
+        expected_fields:
+          verified: true
+    expected_status: ok
+    expected_fields:
+      current_balance: "85.50"
+  - id: tt_get_billing_summary_needs_login
+    tool: get_billing_summary
+    args: {}
+    initial_state:
+      account_id: A1001
+      auth_status: none
+    expected_status: error
+    expected_error: NOT_AUTHENTICATED
+  - id: tt_check_regional_outage_active
+    tool: check_regional_outage
+    args:
+      postal_code: "H3Z 2Y7"
+    expected_status: ok
+    expected_fields:
+      outage_active: true
+  - id: tt_handover_to_person_fr
+    tool: handover_to_person
+    args:
+      reason: "besoin d'un agent"
+      language: "fr-CA"
+    expected_status: ok
+    expected_fields:
+      handoff_status: completed_via_specialist_queue
+      language: fr-CA
+    expected_state:
+      handover_complete: true

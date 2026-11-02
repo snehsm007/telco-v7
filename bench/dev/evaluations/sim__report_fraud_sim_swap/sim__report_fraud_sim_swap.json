@@ -1,0 +1,19 @@
+{
+  "name": "e7801c0b-b189-4be7-a147-51a98b5affed",
+  "displayName": "sim__report_fraud_sim_swap",
+  "scenario": {
+    "task": "My mobile phone suddenly lost service and I suspect a fraudulent SIM swap\n\nUser Guide: State that your phone suddenly lost service and you think someone stole your number. Confirm it is a fraud issue and accept the transfer If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_907c390b"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

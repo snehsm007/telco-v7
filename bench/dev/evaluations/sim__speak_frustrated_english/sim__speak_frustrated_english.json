@@ -1,0 +1,19 @@
+{
+  "name": "51499adb-3f1e-4700-b1a6-5dce6c443176",
+  "displayName": "sim__speak_frustrated_english",
+  "scenario": {
+    "task": "I am frustrated with my internet connection and want to bypass the automated system to talk to a human\n\nUser Guide: Say 'Representative, please!' on the first turn If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_2ba76900"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

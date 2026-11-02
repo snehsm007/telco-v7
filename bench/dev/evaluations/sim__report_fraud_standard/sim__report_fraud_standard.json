@@ -1,0 +1,19 @@
+{
+  "name": "f955d7a9-46a0-4a7f-8149-36230c14a1af",
+  "displayName": "sim__report_fraud_standard",
+  "scenario": {
+    "task": "I noticed unauthorized charges on my account and believe my account has been hacked\n\nUser Guide: Immediately state that your account was hacked or that you see fraudulent charges. Listen to the empathy response and accept the immediate transfer If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_356f38aa"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

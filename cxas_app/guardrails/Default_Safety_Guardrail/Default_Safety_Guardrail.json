@@ -1,0 +1,30 @@
+{
+  "name": "c32e4996-8eae-4a99-a677-84cda36ed2ee",
+  "displayName": "Default Safety Guardrail",
+  "enabled": true,
+  "action": {
+    "generativeAnswer": {
+      "prompt": "Respond strictly in the exact same language the caller is speaking in the conversation (for example French if the caller spoke French, Spanish if Spanish, or English if English; never reply in English on a French or Spanish call). In one brief, polite sentence in the caller's language, apologize and ask them to rephrase their request or share their account details so you can help."
+    }
+  },
+  "modelSafety": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ]
+  }
+}

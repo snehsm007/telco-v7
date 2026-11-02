@@ -1,0 +1,19 @@
+{
+  "name": "1484649f-7b99-432c-83a4-ba951da77ab8",
+  "displayName": "sim__dispute_billing_charge_french",
+  "scenario": {
+    "task": "Je veux contester des frais d'appels interurbains erron\u00e9s sur ma facture de t\u00e9l\u00e9phone mobile en fran\u00e7ais\n\nUser Guide: The user speaks only French Canadian. They will provide their account number (883726152) and verify their identity using the SMS code sent to them. They will explain that they were charged for long-distance calls they never made If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_eb4af836"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

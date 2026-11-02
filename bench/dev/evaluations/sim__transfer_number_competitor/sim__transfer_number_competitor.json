@@ -1,0 +1,19 @@
+{
+  "name": "039b649d-89bd-4141-b0ac-5fbb623ae082",
+  "displayName": "sim__transfer_number_competitor",
+  "scenario": {
+    "task": "I want to transfer my existing mobile phone number from my old carrier over to Bell\n\nUser Guide: The user wants to keep their number from another carrier. They will verify their identity, provide the temporary Bell number, the number to transfer, and their old account details to start the transfer If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_89b34f58"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

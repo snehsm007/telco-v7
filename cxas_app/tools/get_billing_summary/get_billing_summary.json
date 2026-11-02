@@ -1,0 +1,10 @@
+{
+  "name": "get_billing_summary",
+  "displayName": "get_billing_summary",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "get_billing_summary",
+    "description": "Retrieves billing account balance, past due balance, due date, autopay status, and line items for the customer.",
+    "pythonCode": "tools/get_billing_summary/python_function/python_code.py"
+  }
+}

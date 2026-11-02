@@ -1,0 +1,19 @@
+{
+  "name": "01050e03-c4f7-4cef-8579-bc176398e70f",
+  "displayName": "sim__warranty_replacement_samsung_french",
+  "scenario": {
+    "task": "Je veux demander un remplacement sous garantie pour mon t\u00e9l\u00e9phone Samsung qui ne charge plus\n\nUser Guide: The user speaks Canadian French. They explain their Samsung phone won't charge. They will verify their identity, confirm no physical damage, and complete the replacement request If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_30ebb81e"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "1513bc46-2f7d-40c8-bf30-afb84ef40cc3",
+  "displayName": "sim__report_fraud_mid_call_switch",
+  "scenario": {
+    "task": "I call to check my bill, but when I hear about a massive charge I didn't make, I want to report fraud immediately\n\nUser Guide: Ask to check your bill. Authenticate. When the assistant mentions a high balance, say 'Wait, I didn't make those charges, someone must have hacked my account!' Accept the immediate transfer If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_200fdc52",
+      "eval_exp_907c390b"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "095add2d-7512-490f-83ff-a84860bbcc68",
+  "displayName": "sim__manage_mfa_pivot_tech",
+  "scenario": {
+    "task": "I want to enable MFA, and once that's done, I want to report that my internet is running slow\n\nUser Guide: Ask to enable MFA. Authenticate and complete the setup. Then, say 'Also, my internet has been really slow today, can you check it?' If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_7e9bf424",
+      "eval_exp_e01aa7d5"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

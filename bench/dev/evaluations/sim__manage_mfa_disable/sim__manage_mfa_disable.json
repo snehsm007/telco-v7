@@ -1,0 +1,20 @@
+{
+  "name": "3b6368b2-6161-430b-9c7d-34d281df11d2",
+  "displayName": "sim__manage_mfa_disable",
+  "scenario": {
+    "task": "I want to disable two-factor authentication on my account because I lost my old authenticator phone\n\nUser Guide: State that you want to disable two-factor authentication. Authenticate using your PIN, then complete the step-up verification code sent to your backup email. Confirm the deactivation",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_a8af17fb",
+      "eval_exp_0c33daf9"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

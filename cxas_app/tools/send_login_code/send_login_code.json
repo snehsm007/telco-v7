@@ -1,0 +1,10 @@
+{
+  "name": "send_login_code",
+  "displayName": "send_login_code",
+  "executionType": "SYNCHRONOUS",
+  "pythonFunction": {
+    "name": "send_login_code",
+    "description": "Sends a login code to the phone number on the caller's account. Call this when a task tool returned error NOT_LOGGED_IN or authentication is needed.",
+    "pythonCode": "tools/send_login_code/python_function/python_code.py"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "2c5ac33d-6b98-458f-95d5-b1695c7be82c",
+  "displayName": "sim__request_refund_overcharge_french",
+  "scenario": {
+    "task": "Je veux demander le remboursement d'un trop-per\u00e7u sur ma derni\u00e8re facture en fran\u00e7ais\n\nUser Guide: The user speaks French. They explain they accidentally paid their bill twice and want the extra amount refunded to their card. They authenticate using their phone number and SMS OTP",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_d33cf29a"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}
