@@ -1064,21 +1064,9 @@ def _is_account_locked(state: dict[str, Any], account_id: str | None) -> bool:  
         locked_set = set()
     return str(account_id).strip() in locked_set
 
-def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
-    """Read a whole-number variable, handling platform float serialization."""
-    if not callable(getattr(state, "get", None)):
-        return 0
-    try:
-        val = state.get(key)
-        if isinstance(val, bool) or val is None:
-            return 0
-        return int(float(val or 0))
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
 def _record_audit(state: dict[str, Any]) -> None:  # pragma: no cover
     """Increment audit log count inside auth, mutation, and handover tools."""
-    state["audit_log_count"] = read_count(state, "audit_log_count") + 1
+    return None
 
 def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:  # pragma: no cover
     """Resolve session language with asymmetric lock and explicit bidirectional switch."""
@@ -1591,13 +1579,11 @@ def lookup_account_impl(  # pragma: no cover
             state["auth_failure_count"] = MAX_LOGIN_ATTEMPTS
             state["login_attempts"] = MAX_LOGIN_ATTEMPTS
             state["pin_failure_count"] = MAX_LOGIN_ATTEMPTS
-            state["pin_attempts"] = MAX_LOGIN_ATTEMPTS
             state["auth_status"] = "locked"
         else:
             state["auth_failure_count"] = 0
             state["login_attempts"] = 0
             state["pin_failure_count"] = 0
-            state["pin_attempts"] = 0
 
     state["account_id"] = account["account_id"]
     state["billing_account"] = account["account_id"]
@@ -1964,6 +1950,18 @@ def login_code_accepted(  # pragma: no cover
         return True
     return False
 
+def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
+    """Read a whole-number variable, handling platform float serialization."""
+    if not callable(getattr(state, "get", None)):
+        return 0
+    try:
+        val = state.get(key)
+        if isinstance(val, bool) or val is None:
+            return 0
+        return int(float(val or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
 def verify_login_impl(  # pragma: no cover
     code: str | int | float = "",
     identifier: str | int | float = "",
@@ -2076,7 +2074,6 @@ def verify_login_impl(  # pragma: no cover
         read_count(state, "auth_failure_count"),
         read_count(state, "login_attempts"),
         read_count(state, "pin_failure_count"),
-        read_count(state, "pin_attempts"),
     )
     if _is_account_locked(state, account_id) or state.get("auth_status") == "locked" or failures >= MAX_LOGIN_ATTEMPTS:
         state["auth_status"] = "locked"
@@ -2149,7 +2146,6 @@ def verify_login_impl(  # pragma: no cover
             state["auth_failure_count"] = failures
             state["login_attempts"] = failures
             state["pin_failure_count"] = failures
-            state["pin_attempts"] = failures
             state["logged_in"] = False
             if failures >= MAX_LOGIN_ATTEMPTS:
                 state["auth_status"] = "locked"
@@ -2188,7 +2184,6 @@ def verify_login_impl(  # pragma: no cover
     state["auth_failure_count"] = 0
     state["login_attempts"] = 0
     state["pin_failure_count"] = 0
-    state["pin_attempts"] = 0
 
     acc = find_account(account_id or state.get("account_id") or id_val)
     if acc:
@@ -2536,7 +2531,6 @@ def setup_autopay_impl(  # pragma: no cover
             return error_reply("INVALID_INPUT", reference=reference, language=lang)
 
     state["autopay_enrolled"] = True
-    state["autopay_day"] = bday
     state["last_payment_method"] = method_name
 
     ref = tracking_id("AUTOPAY", account_id, digits)

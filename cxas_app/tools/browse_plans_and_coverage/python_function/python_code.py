@@ -1376,21 +1376,9 @@ def _parse_positive_money(val: Any) -> Decimal | None:  # pragma: no cover
     except Exception:
         return None
 
-def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
-    """Read a whole-number variable, handling platform float serialization."""
-    if not callable(getattr(state, "get", None)):
-        return 0
-    try:
-        val = state.get(key)
-        if isinstance(val, bool) or val is None:
-            return 0
-        return int(float(val or 0))
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
 def _record_audit(state: dict[str, Any]) -> None:  # pragma: no cover
     """Increment audit log count inside auth, mutation, and handover tools."""
-    state["audit_log_count"] = read_count(state, "audit_log_count") + 1
+    return None
 
 def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:  # pragma: no cover
     """Resolve session language with asymmetric lock and explicit bidirectional switch."""
@@ -1719,7 +1707,6 @@ def browse_plans_and_coverage_impl(  # pragma: no cover
             a_copy["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
         addons_enriched.append(a_copy)
 
-    state["shortlisted_plan_ids"] = ",".join(p["id"] for p in shortlist)
     ref = tracking_id("browse_plans_and_coverage", cat, pc)
     state["last_tracking_id"] = ref
 

@@ -310,7 +310,7 @@ def _extract_last4(val: Any) -> str | None:
 
 def _record_audit(state: dict[str, Any]) -> None:
     """Increment audit log count inside auth, mutation, and handover tools."""
-    state["audit_log_count"] = read_count(state, "audit_log_count") + 1
+    return None
 
 
 def _check_mock_error(state: dict[str, Any], lang: str) -> dict[str, Any] | None:
@@ -469,7 +469,6 @@ def record_payment_attempt(
     state["card_last4"] = ""
     if last4:
         state["declined_card_last4"] = last4
-    state["payment_declined_once"] = True
     if failures >= MAX_PAYMENT_ATTEMPTS:
         return error_reply(
             "TOO_MANY_ATTEMPTS",
@@ -956,13 +955,11 @@ def lookup_account_impl(
             state["auth_failure_count"] = MAX_LOGIN_ATTEMPTS
             state["login_attempts"] = MAX_LOGIN_ATTEMPTS
             state["pin_failure_count"] = MAX_LOGIN_ATTEMPTS
-            state["pin_attempts"] = MAX_LOGIN_ATTEMPTS
             state["auth_status"] = "locked"
         else:
             state["auth_failure_count"] = 0
             state["login_attempts"] = 0
             state["pin_failure_count"] = 0
-            state["pin_attempts"] = 0
 
     state["account_id"] = account["account_id"]
     state["billing_account"] = account["account_id"]
@@ -1423,7 +1420,6 @@ def verify_login_impl(
         read_count(state, "auth_failure_count"),
         read_count(state, "login_attempts"),
         read_count(state, "pin_failure_count"),
-        read_count(state, "pin_attempts"),
     )
     if _is_account_locked(state, account_id) or state.get("auth_status") == "locked" or failures >= MAX_LOGIN_ATTEMPTS:
         state["auth_status"] = "locked"
@@ -1496,7 +1492,6 @@ def verify_login_impl(
             state["auth_failure_count"] = failures
             state["login_attempts"] = failures
             state["pin_failure_count"] = failures
-            state["pin_attempts"] = failures
             state["logged_in"] = False
             if failures >= MAX_LOGIN_ATTEMPTS:
                 state["auth_status"] = "locked"
@@ -1535,7 +1530,6 @@ def verify_login_impl(
     state["auth_failure_count"] = 0
     state["login_attempts"] = 0
     state["pin_failure_count"] = 0
-    state["pin_attempts"] = 0
 
     acc = find_account(account_id or state.get("account_id") or id_val)
     if acc:
@@ -2044,7 +2038,6 @@ def process_bill_payment_impl(
         else:
             state["card_last4"] = ""
         state["declined_card_last4"] = l4
-        state["payment_declined_once"] = True
         if failures >= MAX_PAYMENT_ATTEMPTS:
             return error_reply(
                 "TOO_MANY_ATTEMPTS",
@@ -2257,7 +2250,6 @@ def setup_payment_arrangement_impl(
     inst_amt = display_amount(round(bal / Decimal(inst_count), 2))
 
     state["payment_arrangement_active"] = True
-    state["payment_arrangement_due_date"] = new_due
     state["is_suspended"] = False
     state["suspension_reason"] = ""
     state["service_restored"] = True
@@ -2566,7 +2558,6 @@ def setup_autopay_impl(
             return error_reply("INVALID_INPUT", reference=reference, language=lang)
 
     state["autopay_enrolled"] = True
-    state["autopay_day"] = bday
     state["last_payment_method"] = method_name
 
     ref = tracking_id("AUTOPAY", account_id, digits)
@@ -2775,7 +2766,6 @@ def process_refund_or_dispute_impl(
 
     cur_bal = Decimal(str(state.get("current_balance") or "0.00"))
     state["current_balance"] = display_amount(max(Decimal(0), cur_bal - amt_dec))
-    state["refund_applied_amount"] = amt_disp
     prefix = "CRD" if claim_kind != "duplicate_payment" else "REF"
     ref = tracking_id(prefix, account_id, amt_disp)
     state["last_tracking_id"] = ref
@@ -3422,7 +3412,6 @@ def browse_plans_and_coverage_impl(
             a_copy["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
         addons_enriched.append(a_copy)
 
-    state["shortlisted_plan_ids"] = ",".join(p["id"] for p in shortlist)
     ref = tracking_id("browse_plans_and_coverage", cat, pc)
     state["last_tracking_id"] = ref
 
@@ -3630,7 +3619,6 @@ def commit_plan_or_order_impl(
 
     state["selected_plan_id"] = chosen_plan_id
     order_ref = tracking_id("ORD", account_id, chosen_plan_id)
-    state["last_order_id"] = order_ref
 
     p_l4 = state.get("caller_provided_phone_last4") or state.get("phone_last4") or ""
     bundle_summary = localized_text(

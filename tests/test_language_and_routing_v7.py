@@ -61,15 +61,15 @@ def test_app_json_retargeting_and_naming() -> None:
 
 
 def test_app_json_canonical_and_fixture_variables() -> None:
-    """Verify all 38 PRD Section 5 canonical vars and 14 fx_* fixture vars exist."""
+    """Verify CES 100-variable limit, active PRD Section 5 session vars, and active fx_* fixture vars."""
     data = json.loads(APP_JSON_PATH.read_text(encoding="utf-8"))
+    assert len(data.get("variableDeclarations", [])) <= 100, (
+        f"Too many variables defined ({len(data.get('variableDeclarations', []))}), limit is 100"
+    )
     var_names = {var["name"] for var in data.get("variableDeclarations", [])}
 
-    # 38 PRD Section 5 canonical variables
+    # 17 active PRD Section 5 session variables
     section_5_vars = [
-        "clid",
-        "tfn",
-        "cirn",
         "billing_account",
         "customer_type",
         "user_id",
@@ -83,33 +83,15 @@ def test_app_json_canonical_and_fixture_variables() -> None:
         "language",
         "utterance",
         "dtmf_digits",
-        "local_noinput_counter",
-        "global_err_count",
-        "no_match_confirmation_count",
-        "misc_counter",
         "mock_mode",
-        "last_pmt_amt",
         "amount",
-        "ban_type",
-        "is_prepaid",
         "loyalty_limit",
-        "vr_task_count",
-        "ticket_state",
-        "item_list",
         "intent_type",
-        "api_resp",
-        "sms_type",
-        "sms_content",
-        "day_val",
-        "date_val",
-        "month_val",
-        "end_time",
-        "flag_val",
     ]
     for var in section_5_vars:
         assert var in var_names, f"Missing PRD Section 5 canonical variable: {var}"
 
-    # 14 fx_* evaluation fixture variables
+    # 13 active fx_* evaluation fixture variables (excluding fx_is_prepaid)
     fixture_vars = [
         "fx_pin_on_file",
         "fx_otp_on_file",
@@ -124,7 +106,6 @@ def test_app_json_canonical_and_fixture_variables() -> None:
         "fx_duplicate_payment_amount",
         "fx_business_flag",
         "fx_after_hours",
-        "fx_is_prepaid",
     ]
     for fx_var in fixture_vars:
         assert fx_var in var_names, f"Missing fx_* fixture variable: {fx_var}"

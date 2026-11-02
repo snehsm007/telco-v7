@@ -136,15 +136,6 @@
       }
     },
     {
-      "name": "pin_attempts",
-      "description": "Counter of secret PIN validation attempts.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
       "name": "payment_failure_count",
       "description": "Count of failed or declined payment attempts.",
       "schema": {
@@ -204,15 +195,6 @@
       "schema": {
         "type": "STRING",
         "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "payment_declined_once",
-      "description": "True if payment attempt was declined at least once.",
-      "schema": {
-        "type": "BOOLEAN",
-        "default": false,
         "required": []
       }
     },
@@ -370,24 +352,6 @@
       }
     },
     {
-      "name": "audit_log_count",
-      "description": "Count of audit events logged in session.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
-      "name": "autopay_day",
-      "description": "Day of month for automatic recurring billing.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
       "name": "autopay_enrolled",
       "description": "True if account is enrolled in AutoPay.",
       "schema": {
@@ -487,15 +451,6 @@
       }
     },
     {
-      "name": "last_order_id",
-      "description": "ID of last order placed.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
       "name": "login_channel",
       "description": "Channel used for login authentication verification.",
       "schema": {
@@ -586,15 +541,6 @@
       }
     },
     {
-      "name": "payment_arrangement_due_date",
-      "description": "Agreed due date for payment arrangement installment.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
       "name": "port_in_request_id",
       "description": "Ticket ID for telephone number port-in request.",
       "schema": {
@@ -609,15 +555,6 @@
       "schema": {
         "type": "STRING",
         "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "refund_applied_amount",
-      "description": "Amount credited or refunded in dollars.",
-      "schema": {
-        "type": "STRING",
-        "default": "0.00",
         "required": []
       }
     },
@@ -669,15 +606,6 @@
     {
       "name": "browsed_plan_category",
       "description": "Plan category most recently browsed during sales flows.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "shortlisted_plan_ids",
-      "description": "Comma-separated list of plan IDs shortlisted.",
       "schema": {
         "type": "STRING",
         "default": "",
@@ -744,60 +672,6 @@
       "schema": {
         "type": "BOOLEAN",
         "default": false,
-        "required": []
-      }
-    },
-    {
-      "name": "local_noinput_counter",
-      "description": "Consecutive turns with no caller input detected.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
-      "name": "no_match_confirmation_count",
-      "description": "Consecutive turns with unmatchable caller input.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
-      "name": "global_err_count",
-      "description": "Total cumulative errors in session.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
-      "name": "clid",
-      "description": "10-digit caller ID from telephony.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "tfn",
-      "description": "Dialed toll-free number.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "cirn",
-      "description": "Customer inquiry reference number.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
         "required": []
       }
     },
@@ -874,26 +748,8 @@
       }
     },
     {
-      "name": "misc_counter",
-      "description": "Generic per-flow counter.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
       "name": "mock_mode",
       "description": "Synthetic success eval toggle.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "last_pmt_amt",
-      "description": "Last payment amount recorded.",
       "schema": {
         "type": "STRING",
         "default": "",
@@ -910,24 +766,6 @@
       }
     },
     {
-      "name": "ban_type",
-      "description": "Billing account type.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "is_prepaid",
-      "description": "Prepaid account indicator.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
       "name": "loyalty_limit",
       "description": "Loyalty program adjustment ceiling in dollars.",
       "schema": {
@@ -937,107 +775,8 @@
       }
     },
     {
-      "name": "vr_task_count",
-      "description": "Virtual-repair iteration counter.",
-      "schema": {
-        "type": "INTEGER",
-        "default": 0,
-        "required": []
-      }
-    },
-    {
-      "name": "ticket_state",
-      "description": "Virtual-repair ticket status (open, in-progress, closed).",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "item_list",
-      "description": "Captured equipment list.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
       "name": "intent_type",
       "description": "Sub-intent classification.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "api_resp",
-      "description": "Last API response payload.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "sms_type",
-      "description": "SMS payload format (Public or Private).",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "sms_content",
-      "description": "SMS body text.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "day_val",
-      "description": "Per-flow temporary day string.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "date_val",
-      "description": "Per-flow temporary date string.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "month_val",
-      "description": "Per-flow temporary month string.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "end_time",
-      "description": "Per-flow temporary end time string.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "flag_val",
-      "description": "Per-flow temporary flag string.",
       "schema": {
         "type": "STRING",
         "default": "",
@@ -1155,15 +894,6 @@
     {
       "name": "fx_after_hours",
       "description": "Evaluation fixture override for after-hours operational flag.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
-      "name": "fx_is_prepaid",
-      "description": "Evaluation fixture override for prepaid line status.",
       "schema": {
         "type": "STRING",
         "default": "",

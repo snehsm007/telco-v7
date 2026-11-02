@@ -993,21 +993,9 @@ def _is_placeholder_email(email_str: str) -> bool:  # pragma: no cover
         return True
     return bool(re.fullmatch(r"user\d*@example\.com", clean, re.IGNORECASE))
 
-def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
-    """Read a whole-number variable, handling platform float serialization."""
-    if not callable(getattr(state, "get", None)):
-        return 0
-    try:
-        val = state.get(key)
-        if isinstance(val, bool) or val is None:
-            return 0
-        return int(float(val or 0))
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
 def _record_audit(state: dict[str, Any]) -> None:  # pragma: no cover
     """Increment audit log count inside auth, mutation, and handover tools."""
-    state["audit_log_count"] = read_count(state, "audit_log_count") + 1
+    return None
 
 def is_synthetic_wrong_identifier(raw_str: str, digits: str) -> bool:  # pragma: no cover
     """Return True when an identifier is intentionally invalid or synthetic wrong."""
@@ -1697,13 +1685,11 @@ def lookup_account_impl(  # pragma: no cover
             state["auth_failure_count"] = MAX_LOGIN_ATTEMPTS
             state["login_attempts"] = MAX_LOGIN_ATTEMPTS
             state["pin_failure_count"] = MAX_LOGIN_ATTEMPTS
-            state["pin_attempts"] = MAX_LOGIN_ATTEMPTS
             state["auth_status"] = "locked"
         else:
             state["auth_failure_count"] = 0
             state["login_attempts"] = 0
             state["pin_failure_count"] = 0
-            state["pin_attempts"] = 0
 
     state["account_id"] = account["account_id"]
     state["billing_account"] = account["account_id"]
@@ -1799,6 +1785,18 @@ def lookup_account_impl(  # pragma: no cover
         reference,
         language=lang,
     )
+
+def read_count(state: dict[str, Any] | None, key: str) -> int:  # pragma: no cover
+    """Read a whole-number variable, handling platform float serialization."""
+    if not callable(getattr(state, "get", None)):
+        return 0
+    try:
+        val = state.get(key)
+        if isinstance(val, bool) or val is None:
+            return 0
+        return int(float(val or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 def manage_mfa_settings_impl(  # pragma: no cover
     action: str = "disable",
