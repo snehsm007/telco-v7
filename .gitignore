@@ -29,3 +29,7 @@ pulled/
 *.env
 .env*
 *.json.key
+
+# Teamwork coordination files
+.agents/teamwork/
+
