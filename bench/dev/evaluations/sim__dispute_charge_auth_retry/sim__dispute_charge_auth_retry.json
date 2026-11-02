@@ -10,7 +10,9 @@
     "rubrics": [],
     "scenarioExpectations": [],
     "userFacts": [],
-    "variableOverrides": {}
+    "variableOverrides": {
+      "fx_pin_on_file": "4321"
+    }
   },
   "tags": [
     "public",

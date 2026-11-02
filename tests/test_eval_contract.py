@@ -220,3 +220,61 @@ def test_extract_eval_facts_handles_dict_user_facts_and_turns() -> None:
     assert "5678" in facts["retry_codes"]
     assert "ACC-1001" in facts["user_fact_identifiers"]
     assert "202-555-0143" in facts["identifiers"]
+
+
+def test_variable_overrides_pin_passes_contract(tmp_path: Path) -> None:
+    fakes = tmp_path / "fakes.py"
+    fakes.write_text(FAKES_TEMPLATE, encoding="utf-8")
+    evals_dir = tmp_path / "bench" / "dev" / "evaluations"
+
+    _write_eval(
+        evals_dir,
+        "sim_override_pin",
+        {
+            "displayName": "sim_override_pin",
+            "scenario": {
+                "task": (
+                    "If asked for a PIN, first enter '9999' (which is incorrect); "
+                    "when prompted to retry, enter the PIN '4321'."
+                ),
+                "userFacts": ["Account ID: ACC-1001"],
+                "variableOverrides": {"fx_pin_on_file": "4321"},
+            },
+        },
+    )
+
+    violations = check_eval_contract(evals_dir, fakes)
+    assert violations == []
+
+
+def test_forbidden_variable_overrides_fails(tmp_path: Path) -> None:
+    fakes = tmp_path / "fakes.py"
+    fakes.write_text(FAKES_TEMPLATE, encoding="utf-8")
+    evals_dir = tmp_path / "bench" / "dev" / "evaluations"
+
+    _write_eval(
+        evals_dir,
+        "sim_forbidden_override",
+        {
+            "displayName": "sim_forbidden_override",
+            "scenario": {
+                "task": "Check balance. Enter PIN 1234.",
+                "userFacts": ["Account ID: ACC-1001"],
+                "variableOverrides": {"identified": True, "auth_status": "pass"},
+            },
+        },
+    )
+
+    violations = check_eval_contract(evals_dir, fakes)
+    assert any(v["kind"] == "FORBIDDEN_VARIABLE_OVERRIDE" for v in violations)
+
+
+def test_card_number_stripped_from_codes() -> None:
+    task = (
+        "The user wants a hands-off billing experience. They authenticate using "
+        "their PIN and request to set up autopay with their Visa card ending in 4321"
+    )
+    facts = extract_eval_facts({"scenario": {"task": task}})
+    assert "4321" not in facts["first_try_codes"]
+    assert "4321" not in facts["retry_codes"]
+    assert "4321" not in facts["wrong_codes"]

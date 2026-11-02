@@ -571,22 +571,43 @@ def sync_bench(cloud: Cloud, app_name: str, expectations: list[dict], evaluation
         if dname in existing:
             ex_ev = existing[dname]
             ex_refs = list(getattr(ex_ev.scenario, "evaluation_expectations", []) or [])
-            if all(r.startswith("projects/") for r in ex_refs):
+            ex_vo_raw = getattr(getattr(ex_ev, "scenario", None), "variable_overrides", {})
+            ex_vo = {str(k): str(v) for k, v in ex_vo_raw.items()} if hasattr(ex_vo_raw, "items") else {}
+            target_vo_raw = (data.get("scenario") or {}).get("variableOverrides") or {}
+            target_vo = {str(k): str(v) for k, v in target_vo_raw.items()} if hasattr(target_vo_raw, "items") else {}
+            target_refs = list((data.get("scenario") or {}).get("evaluationExpectations") or [])
+
+            vo_differs = (ex_vo != target_vo)
+            refs_differ = (ex_refs != target_refs) or not all(r.startswith("projects/") for r in ex_refs)
+
+            if not vo_differs and not refs_differ:
                 eval_by_name[dname] = ex_ev
                 continue
+
             data["name"] = ex_ev.name
             proto = types_mod.Evaluation()
             parse_dict(data, proto._pb, ignore_unknown_fields=True)
-            eval_by_name[dname] = cloud.call(
-                "WRITE",
-                "Evaluations.update_evaluation",
-                ex_ev.name,
-                f"bench: relink expectation resource names on {ve_id}",
-                lambda proto=proto: cloud.evals.update_evaluation(evaluation=proto, app_name=app_name),
-                describe=lambda u: f"updated {u.name}",
-                write=True,
-            )
-            continue
+            try:
+                eval_by_name[dname] = cloud.call(
+                    "WRITE",
+                    "Evaluations.update_evaluation",
+                    ex_ev.name,
+                    f"bench: update variableOverrides or expectations on {ve_id}",
+                    lambda proto=proto: cloud.evals.update_evaluation(evaluation=proto, app_name=app_name),
+                    describe=lambda u: f"updated {u.name}",
+                    write=True,
+                )
+                continue
+            except Exception:
+                cloud.call(
+                    "WRITE",
+                    "Evaluations.delete_evaluation",
+                    ex_ev.name,
+                    f"bench: delete existing {ve_id} before recreate",
+                    lambda: cloud.evals.delete_evaluation(ex_ev.name),
+                    describe=lambda d: f"deleted {ex_ev.name}",
+                    write=True,
+                )
 
         data.pop("name", None)
         proto = types_mod.Evaluation()

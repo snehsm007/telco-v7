@@ -54,6 +54,10 @@ _ACCOUNT_KV_RE = re.compile(
     r"\baccount(?:[_\s-]*(?:id|number|num|#))?\s*[:=-]\s*['\"]?([A-Za-z]{1,6}-?\d{3,10})['\"]?",
     re.IGNORECASE,
 )
+_CARD_RE = re.compile(
+    r"\b(?:visa|mastercard|amex|credit\s+card|debit\s+card|card)\b[^\d\n]*?\b\d{4,16}\b|\b(?:ending\s+in|last\s*4)\s*[:=-]?\s*['\"]?\d{4}\b",
+    re.IGNORECASE,
+)
 
 
 def _assert_not_holdout(evals_dir: Path) -> None:
@@ -185,6 +189,7 @@ def extract_eval_facts(eval_data: dict[str, Any]) -> dict[str, set[str]]:
                 cleaned = _PHONE_KV_RE.sub(" ", cleaned)
                 cleaned = _ACCOUNT_ID_RE.sub(" ", cleaned)
                 cleaned = _ACCOUNT_KV_RE.sub(" ", cleaned)
+                cleaned = _CARD_RE.sub(" ", cleaned)
                 for m in _CODE_TOKEN_RE.finditer(cleaned):
                     code = m.group(1)
                     if is_wrong and not is_retry:
@@ -228,6 +233,7 @@ def _call_login_code_accepted(
     attempt: int,
     always_wrong: set[str],
     valid_codes: set[str],
+    state: dict[str, Any] | None = None,
 ) -> bool:
     norm_fn = getattr(
         fakes_mod,
@@ -241,21 +247,38 @@ def _call_login_code_accepted(
         sig = inspect.signature(login_fn)
         params = list(sig.parameters.values())
         param_names = [p.name for p in params]
+        kwargs: dict[str, Any] = {}
         if "attempts" in param_names:
-            return bool(login_fn(code, attempts=attempt))
-        if "attempt" in param_names:
-            return bool(login_fn(code, attempt=attempt))
-        if "strict" in param_names:
-            return bool(login_fn(code, strict=(attempt >= 1)))
-        if len(params) >= 2:
-            return bool(login_fn(code, attempt))
-        accepted = bool(login_fn(code))
+            kwargs["attempts"] = attempt
+        elif "attempt" in param_names:
+            kwargs["attempt"] = attempt
+        elif "strict" in param_names:
+            kwargs["strict"] = (attempt >= 1)
+        if "state" in param_names:
+            kwargs["state"] = state
+
+        scope_cm = getattr(fakes_mod, "fixture_state_scope", None)
+        if callable(scope_cm):
+            with scope_cm(state):
+                accepted = bool(login_fn(code, **kwargs))
+        else:
+            accepted = bool(login_fn(code, **kwargs))
+
         if attempt >= 1 and valid_codes:
-            return accepted and (digits in valid_codes or code in valid_codes)
+            accepted = accepted and (digits in valid_codes or code in valid_codes)
+        if not accepted and state:
+            fx_p = norm_fn(state.get("fx_pin_on_file", ""))
+            fx_o = norm_fn(state.get("fx_otp_on_file", ""))
+            if (fx_p and digits == fx_p) or (fx_o and digits == fx_o):
+                accepted = True
         return accepted
 
     if digits in always_wrong or code in always_wrong or len(digits) < 4:
         return False
+    if state and (state.get("fx_pin_on_file") == code or state.get("fx_pin_on_file") == digits):
+        return True
+    if state and (state.get("fx_otp_on_file") == code or state.get("fx_otp_on_file") == digits):
+        return True
     if attempt >= 1 and valid_codes:
         return digits in valid_codes or code in valid_codes
     return True
@@ -375,6 +398,46 @@ def check_eval_contract(
         eval_id = str(data.get("displayName") or data.get("id") or eval_file.stem)
         facts = extract_eval_facts(data)
 
+        scenario = data.get("scenario") or data.get("simulation") or {}
+        var_overrides = (
+            scenario.get("variableOverrides")
+            or data.get("variableOverrides")
+            or {}
+        )
+        if not isinstance(var_overrides, dict):
+            var_overrides = {}
+
+        FORBIDDEN_OVERRIDE_KEYS = frozenset({
+            "identified",
+            "auth_status",
+            "logged_in",
+            "verified",
+            "auth_failure_count",
+            "login_channel",
+        })
+        forbidden = sorted(k for k in var_overrides if k in FORBIDDEN_OVERRIDE_KEYS)
+        if forbidden:
+            violations.append(
+                {
+                    "eval_id": eval_id,
+                    "file": str(eval_file),
+                    "kind": "FORBIDDEN_VARIABLE_OVERRIDE",
+                    "value": ", ".join(forbidden),
+                    "reason": (
+                        f"variableOverrides in {eval_id} contains forbidden non-backend "
+                        f"facts: {forbidden}"
+                    ),
+                }
+            )
+
+        eval_valid_codes = set(valid_codes)
+        if var_overrides.get("fx_pin_on_file"):
+            eval_valid_codes.add(str(var_overrides["fx_pin_on_file"]))
+            eval_valid_codes.add(norm_fn(str(var_overrides["fx_pin_on_file"])))
+        if var_overrides.get("fx_otp_on_file"):
+            eval_valid_codes.add(str(var_overrides["fx_otp_on_file"]))
+            eval_valid_codes.add(norm_fn(str(var_overrides["fx_otp_on_file"])))
+
         for code in sorted(facts["first_try_codes"]):
             digits = norm_fn(code)
             in_wrong = code in always_wrong or digits in always_wrong
@@ -383,7 +446,8 @@ def check_eval_contract(
                 code,
                 attempt=0,
                 always_wrong=always_wrong,
-                valid_codes=valid_codes,
+                valid_codes=eval_valid_codes,
+                state=var_overrides,
             )
             if in_wrong or not accepted:
                 violations.append(
@@ -407,7 +471,8 @@ def check_eval_contract(
                 code,
                 attempt=0,
                 always_wrong=always_wrong,
-                valid_codes=valid_codes,
+                valid_codes=eval_valid_codes,
+                state=var_overrides,
             )
             accepted_retry = (
                 _call_login_code_accepted(
@@ -415,13 +480,14 @@ def check_eval_contract(
                     code,
                     attempt=1,
                     always_wrong=always_wrong,
-                    valid_codes=valid_codes,
+                    valid_codes=eval_valid_codes,
+                    state=var_overrides,
                 )
                 if enforce_strict_retry
                 else accepted_attempt0
             )
             in_valid_sets = (
-                ((not valid_codes) or (code in valid_codes or digits in valid_codes))
+                ((not eval_valid_codes) or (code in eval_valid_codes or digits in eval_valid_codes))
                 if enforce_strict_retry
                 else True
             )
@@ -447,7 +513,8 @@ def check_eval_contract(
                 code,
                 attempt=0,
                 always_wrong=always_wrong,
-                valid_codes=valid_codes,
+                valid_codes=eval_valid_codes,
+                state=var_overrides,
             )
             if not in_wrong and accepted:
                 violations.append(

@@ -11,7 +11,12 @@
     "rubrics": [],
     "scenarioExpectations": [],
     "userFacts": [],
-    "variableOverrides": {}
+    "variableOverrides": {
+      "fx_pin_on_file": "4829",
+      "fx_unapplied_payment": "85.50",
+      "fx_account_suspended": "true",
+      "fx_suspension_reason": "non_payment"
+    }
   },
   "tags": [
     "public",

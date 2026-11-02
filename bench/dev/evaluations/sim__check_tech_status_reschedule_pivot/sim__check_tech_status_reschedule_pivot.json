@@ -11,7 +11,9 @@
     "rubrics": [],
     "scenarioExpectations": [],
     "userFacts": [],
-    "variableOverrides": {}
+    "variableOverrides": {
+      "fx_tech_status": "delayed"
+    }
   },
   "tags": [
     "public",

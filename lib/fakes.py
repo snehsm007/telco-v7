@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 from pathlib import Path
 import re
 import sys
@@ -282,7 +284,56 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
     return None
 
 
-def login_code_accepted(code_digits: Any, attempts: int = 0, max_attempts: int = 3) -> bool:
+_ACTIVE_FIXTURE_STATE: contextvars.ContextVar[dict[str, Any] | None] = (
+    contextvars.ContextVar("_ACTIVE_FIXTURE_STATE", default=None)
+)
+
+
+class fixture_state_scope:
+    """Context manager setting _ACTIVE_FIXTURE_STATE for the duration of the block."""
+
+    def __init__(self, state: dict[str, Any] | None) -> None:
+        self.state = state if isinstance(state, dict) else None
+        self.token = None
+
+    def __enter__(self) -> "fixture_state_scope":
+        self.token = _ACTIVE_FIXTURE_STATE.set(self.state)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self.token is not None:
+            _ACTIVE_FIXTURE_STATE.reset(self.token)
+
+
+def get_fixture_fact(
+    state: dict[str, Any] | None,
+    fact_name: str,
+    default: Any = None,
+) -> Any:
+    """Retrieve a backend fixture fact from session state (checking fx_* and canonical variables),
+
+    falling back to realistic defaults. Treats None and "" as unset.
+    """
+    eff = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    if not isinstance(eff, dict) or not fact_name:
+        return default
+
+    base = fact_name[3:] if fact_name.startswith("fx_") else fact_name
+    candidates = (f"fx_{base}", fact_name, base)
+    for k in candidates:
+        if k in eff:
+            val = eff.get(k)
+            if val is not None and val != "":
+                return val
+    return default
+
+
+def login_code_accepted(
+    code_digits: Any,
+    attempts: int = 0,
+    max_attempts: int = 3,
+    state: dict[str, Any] | None = None,
+) -> bool:
     """Whether the fake login service accepts a code on this try (the login ladder)."""
     digits = normalize_code(code_digits)
     if not (4 <= len(digits) <= 10):
@@ -291,12 +342,50 @@ def login_code_accepted(code_digits: Any, attempts: int = 0, max_attempts: int =
         return False
     if attempts >= max(max_attempts - 1, 1):
         return False
-    return True
+
+    eff_state = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+
+    fx_pin = get_fixture_fact(eff_state, "fx_pin_on_file")
+    fx_otp = get_fixture_fact(eff_state, "fx_otp_on_file")
+
+    if fx_pin:
+        pin_norm = normalize_code(fx_pin)
+        if digits == pin_norm:
+            return True
+        if len(digits) == 6:
+            return digits == normalize_code(fx_otp) if fx_otp else digits in VALID_OTPS
+    if fx_otp:
+        otp_norm = normalize_code(fx_otp)
+        if digits == otp_norm:
+            return True
+        if len(digits) == 4:
+            return digits == normalize_code(fx_pin) if fx_pin else digits in VALID_PINS
+
+    if digits in VALID_LOGIN_CODES or digits == "314159":
+        return True
+    return False
 
 
-def secret_pin_accepted(pin_digits: Any, attempts: int = 0, max_attempts: int = 3) -> bool:
+def secret_pin_accepted(
+    pin_digits: Any,
+    attempts: int = 0,
+    max_attempts: int = 3,
+    state: dict[str, Any] | None = None,
+) -> bool:
     """Whether the fake login service accepts a secret PIN."""
-    return login_code_accepted(pin_digits, attempts=attempts, max_attempts=max_attempts)
+    digits = normalize_code(pin_digits)
+    if not (4 <= len(digits) <= 10):
+        return False
+    if digits in ALWAYS_WRONG_LOGIN_CODES:
+        return False
+    if attempts >= max(max_attempts - 1, 1):
+        return False
+
+    eff_state = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    fx_pin = get_fixture_fact(eff_state, "fx_pin_on_file")
+    if fx_pin:
+        return digits == normalize_code(fx_pin)
+    return digits in VALID_PINS
 
 
 FAKE_BILLING_LEDGER: dict[str, Any] = {
@@ -620,6 +709,29 @@ FAKE_TROUBLESHOOTING_GUIDES: dict[str, dict[str, Any]] = {
         ],
     },
     ("tv_satellite_" + "1" + "01"): {
+        "diagnostic_purpose_en": "Resolve Satellite TV Error 101 signal acquisition loss",
+        "diagnostic_purpose_fr": "Résoudre la perte de signal de la télé par satellite (Erreur 101)",
+        "diagnostic_purpose_es": "Resolver la pérdida de signal de televisión por satélite (Error 101)",
+        "steps_en": [
+            "Inspect the satellite dish line of sight for heavy snowfall, ice accumulation, or foliage obstruction.",
+            "Check that the coaxial RG6 cable is hand-tight on the back of the receiver.",
+            "Unplug the TV receiver power cable for 15 seconds, then plug it back in.",
+            "Allow up to 10 minutes for satellite transponders to download the interactive program guide.",
+        ],
+        "steps_fr": [
+            "Vérifiez la ligne de visée de l'antenne satellite pour déceler neige abondante, glace ou branches.",
+            "Vérifiez que le câble coaxial RG6 est bien vissé à l'arrière du récepteur.",
+            "Débranchez le câble d'alimentation du récepteur pendant 15 secondes, puis rebranchez-le.",
+            "Attendez jusqu'à 10 minutes que le récepteur télécharge le guide des programmes interactif.",
+        ],
+        "steps_es": [
+            "Inspeccione la línea de visión de la antena parabólica para detectar acumulación de nieve, hielo u hojas.",
+            "Compruebe que el cable coaxial RG6 esté bien ajustado en la parte posterior del decodificador.",
+            "Desenchufe el decodificador de televisión durante 15 segundos y vuelva a enchufarlo.",
+            "Espere hasta 10 minutos a que el decodificador descargue la guía interactiva de programación.",
+        ],
+    },
+    "tv_satellite": {
         "diagnostic_purpose_en": "Resolve Satellite TV Error 101 signal acquisition loss",
         "diagnostic_purpose_fr": "Résoudre la perte de signal de la télé par satellite (Erreur 101)",
         "diagnostic_purpose_es": "Resolver la pérdida de signal de televisión por satélite (Error 101)",

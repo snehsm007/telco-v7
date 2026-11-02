@@ -10,7 +10,9 @@
     "rubrics": [],
     "scenarioExpectations": [],
     "userFacts": [],
-    "variableOverrides": {}
+    "variableOverrides": {
+      "fx_duplicate_payment_amount": "20.00"
+    }
   },
   "tags": [
     "public",

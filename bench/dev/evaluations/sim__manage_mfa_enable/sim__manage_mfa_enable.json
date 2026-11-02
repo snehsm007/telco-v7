@@ -11,7 +11,9 @@
     "rubrics": [],
     "scenarioExpectations": [],
     "userFacts": [],
-    "variableOverrides": {}
+    "variableOverrides": {
+      "fx_mfa_enabled": "false"
+    }
   },
   "tags": [
     "public",
