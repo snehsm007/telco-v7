@@ -27,7 +27,7 @@ jobs:
     name: "Gate 0: Offline CI Gate"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: make install
       - name: Run Offline CI or Self-Tests
@@ -63,7 +63,7 @@ jobs:
             echo "Gate 0 Offline CI passed. Cloud push skipped because GCP_WIF_PROVIDER / GCP_WIF_SERVICE_ACCOUNT secrets are not configured yet." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.check_wif.outputs.enabled == 'true'
       - uses: astral-sh/setup-uv@v5
         if: steps.check_wif.outputs.enabled == 'true'
