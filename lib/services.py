@@ -334,26 +334,69 @@ def _check_mock_error(state: dict[str, Any], lang: str) -> dict[str, Any] | None
     return None
 
 
-def _check_mock_mode(
+def _is_mock_mode(state: dict[str, Any] | None) -> bool:
+    """Check whether mock_mode is active (PRD Section 17 & Section 21).
+
+    Defaults to True when unset or empty for backward compatibility with unit tests.
+    Explicit 'false', '0', 'no' evaluates to False.
+    """
+    if not isinstance(state, dict):
+        return True
+    val = get_fixture_fact(state, "mock_mode")
+    if val is None:
+        val = state.get("mock_mode", "True")
+    val_str = str(val).strip().lower() if val is not None else ""
+    return val_str in ("", "true", "1", "yes")
+
+
+def _call_live_backend(
     tool_name: str,
     state: dict[str, Any],
     lang: str,
     reference: str,
-    extra_data: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    """Return synthetic success branch if mock_mode is set (PRD Section 17)."""
-    val = str(get_fixture_fact(state, "mock_mode", "") or state.get("mock_mode") or "").strip().lower()
-    if val == "true":
-        data: dict[str, Any] = {
-            "status": "ok",
-            "mock_mode": True,
-            "synthetic_success": True,
-            "tool": tool_name,
-        }
-        if extra_data:
-            data.update(extra_data)
-        return ok_reply(data, reference, language=lang)
-    return None
+) -> dict[str, Any]:
+    """Return PRD Section 6 system error envelope when mock_mode is explicitly disabled."""
+    if tool_name in {"lookup_account", "send_login_code", "verify_login"}:
+        err_code = "AUTH_SERVICE_UNAVAILABLE"
+    else:
+        err_code = "SYSTEM_DOWN"
+
+    handoff_msg = spoken_line("live_agent_handoff", lang)
+    loc = resolve_locale(lang) if "resolve_locale" in globals() else lang
+    return {
+        "status": "error",
+        "error": err_code,
+        "error_message": f"Live telecom CRM backend connection unavailable for {tool_name}.",
+        "agent_action": "ESCALATE_SYSTEM_UNAVAILABLE",
+        "tracking_id": reference,
+        "active_language": loc,
+        "data": {
+            "error_category": "SYSTEM",
+            "must_escalate_immediately": True,
+            "escalation_reason": "system_unavailable",
+            "handoff_message": handoff_msg,
+            "mock_mode": False,
+        },
+        "must_escalate_immediately": True,
+        "handoff_message": handoff_msg,
+    }
+
+
+def _service_ok_reply(
+    data: dict[str, Any] | None = None,
+    reference: str | None = None,
+    language: str | None = None,
+    state: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Build ok_reply stamping mock_mode: True when _is_mock_mode(state) is True."""
+    payload = dict(data or {})
+    if _is_mock_mode(state):
+        payload["mock_mode"] = True
+    reply = ok_reply(payload, reference=reference, language=language)
+    if _is_mock_mode(state):
+        reply["mock_mode"] = True
+    return reply
 
 
 def _detect_handover_language(
@@ -459,7 +502,7 @@ def record_payment_attempt(
         if last4:
             state["card_last4"] = last4
         state["last_payment_method"] = str(method or "card")
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "payment_processed": True,
                 "attempts": 0,
@@ -467,6 +510,7 @@ def record_payment_attempt(
                 "last_payment_method": state["last_payment_method"],
             },
             ref,
+            state=state,
         )
     failures = read_count(state, "payment_failure_count") + 1
     state["payment_failure_count"] = failures
@@ -810,10 +854,8 @@ def lookup_account_impl(
                 name_val = raw_strip
 
     reference = tracking_id("lookup_account", id_val or name_val or email_val or postal_val)
-
-    mock_res = _check_mock_mode("lookup_account", state, lang, reference, {"identified": True, "account_id": "A1001", "identification_status": "Pass"})
-    if mock_res:
-        return mock_res
+    if not _is_mock_mode(state):
+        return _call_live_backend("lookup_account", state, lang, reference)
 
     # Priority 2: Fraud claim preempts business-account handoff (PRD Section 20)
     combined_utt = " ".join([
@@ -836,7 +878,7 @@ def lookup_account_impl(
         full_msg = f"{empathy} {fraud_msg}".strip() if empathy else fraud_msg
         state["handoff_message"] = full_msg
         state["last_tracking_id"] = reference
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "must_escalate_immediately": True,
                 "escalation_reason": "fraud_escalation",
@@ -849,6 +891,7 @@ def lookup_account_impl(
             },
             reference,
             language=lang,
+            state=state,
         )
 
     # Business account deflection (BR-TV-012, T-09, Priority 5)
@@ -867,7 +910,7 @@ def lookup_account_impl(
         state["handoff_reason"] = "business_handoff"
         state["handoff_message"] = biz_line
         state["last_tracking_id"] = reference
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "business_flag": True,
                 "customer_type": "business",
@@ -879,6 +922,7 @@ def lookup_account_impl(
             },
             reference,
             language=lang,
+            state=state,
         )
 
     # Restricted caller check (BR-TV-002)
@@ -1132,7 +1176,7 @@ def lookup_account_impl(
         and (raw_id_str.strip().startswith("+") or raw_id_str.strip().startswith("00"))
         and 10 <= len(caller_digits) <= 15
     )
-    caller_gave_phone = not has_alpha and (len(norm_caller_digits) == 10 or is_intl)
+    caller_gave_phone = not has_alpha and (len(norm_caller_digits) in (7, 10) or is_intl)
 
     if caller_gave_phone:
         p_l4 = norm_caller_digits[-4:]
@@ -1226,10 +1270,11 @@ def lookup_account_impl(
             "Demander à quel numéro de mobile envoyer le code de vérification, ou proposer l'authentification avec le NIP du compte.",
             "Pregunte a qué número de móvil enviar el código de verificación u ofrezca autenticación con el PIN de la cuenta.",
         )
-    return ok_reply(
+    return _service_ok_reply(
         reply_data,
         reference,
         language=lang,
+        state=state,
     )
 
 
@@ -1323,6 +1368,11 @@ def send_login_code_impl(
 
     _record_audit(state)
 
+    init_ref = tracking_id("send_login_code", str(state.get("account_id") or identifier or ""))
+    state["last_tracking_id"] = init_ref
+    if not _is_mock_mode(state):
+        return _call_live_backend("send_login_code", state, lang, init_ref)
+
     id_val = identifier if str(identifier or "").strip() else kwargs.get("phone_or_account", kwargs.get("account_id", kwargs.get("phone", kwargs.get("phone_number", ""))))
     caller_email = str(kwargs.get("email") or "").strip()
     if not caller_email and "@" in str(id_val or "").strip():
@@ -1379,10 +1429,11 @@ def send_login_code_impl(
     state["last_tracking_id"] = reference
 
     if not _is_truthy_bool(resend) and state.get("auth_status") == "pass" and state.get("logged_in"):
-        return ok_reply(
+        return _service_ok_reply(
             {"sent": False, "already_verified": True},
             reference,
             language=lang,
+            state=state,
         )
 
     failures = max(read_count(state, "auth_failure_count"), read_count(state, "login_attempts"))
@@ -1413,7 +1464,14 @@ def send_login_code_impl(
             dest_last4 = str(acc["linked_mobile_last4"])
 
     if norm_chan == "sms" and not dest_last4:
-        if not state.get("lookup_by_name"):
+        is_identified = bool(state.get("identified") or state.get("account_id"))
+        fx_mobile = str(get_fixture_fact(state, "fx_mobile_on_file") or "").strip().lower()
+        mobile_disabled = fx_mobile in ("none", "false", "0")
+
+        if is_identified and not mobile_disabled:
+            # Dispatch SMS OTP to account's registered mobile on file; dest_last4 remains ""
+            pass
+        elif not state.get("lookup_by_name"):
             action_text = localized_text(
                 lang,
                 "Ask for the 10-digit mobile number on the account and call lookup_account with it to identify the account, then send the code to the mobile on file; or offer PIN authentication.",
@@ -1448,10 +1506,11 @@ def send_login_code_impl(
         }
         if masked:
             email_data["masked_email"] = masked
-        reply = ok_reply(
+        reply = _service_ok_reply(
             email_data,
             reference,
             language=lang,
+            state=state,
         )
         reply["code_sent"] = True
         reply["channel"] = "email"
@@ -1460,7 +1519,7 @@ def send_login_code_impl(
         return reply
 
     spoken = spoken_line("id_verification_otp", lang)
-    reply = ok_reply(
+    reply = _service_ok_reply(
         {
             "sent": True,
             "already_verified": False,
@@ -1468,6 +1527,7 @@ def send_login_code_impl(
         },
         reference,
         language=lang,
+        state=state,
     )
     reply["code_sent"] = True
     reply["channel"] = "sms"
@@ -1504,6 +1564,13 @@ def verify_login_impl(
         return mock_err
 
     _record_audit(state)
+
+    init_code_val = code or kwargs.get("pin", "") or state.get("dtmf_digits", "")
+    init_account_id = str(state.get("account_id") or "")
+    init_ref = tracking_id("verify_login", init_account_id, str(init_code_val))
+    state["last_tracking_id"] = init_ref
+    if not _is_mock_mode(state):
+        return _call_live_backend("verify_login", state, lang, init_ref)
 
     id_val = identifier if str(identifier or "").strip() else kwargs.get("phone_or_account", kwargs.get("account_id", kwargs.get("phone", kwargs.get("phone_number", ""))))
     if str(id_val or "").strip():
@@ -1549,16 +1616,6 @@ def verify_login_impl(
     reference = tracking_id("verify_login", account_id, str(code_val))
     state["last_tracking_id"] = reference
 
-    mock_res = _check_mock_mode("verify_login", state, lang, reference, {
-        "verified": True,
-        "logged_in": True,
-        "auth_status": "pass",
-    })
-    if mock_res:
-        state["auth_status"] = "pass"
-        state["logged_in"] = True
-        return mock_res
-
     is_step_up = (
         (bool(state.get("mfa_email_code_sent")) and not bool(state.get("mfa_email_verified")))
         or str(method or "").lower() == "email"
@@ -1586,10 +1643,11 @@ def verify_login_impl(
         }
         if bool(state.get("browsed_plan_category")):
             pass_data["current_active_plans"] = _active_account_plans(state, lang)
-        return ok_reply(
+        return _service_ok_reply(
             pass_data,
             reference,
             language=lang,
+            state=state,
         )
 
     failures = max(
@@ -1763,10 +1821,11 @@ def verify_login_impl(
     }
     if bool(state.get("browsed_plan_category")):
         pass_data_final["current_active_plans"] = _active_account_plans(state, lang)
-    return ok_reply(
+    return _service_ok_reply(
         pass_data_final,
         reference,
         language=lang,
+        state=state,
     )
 
 
@@ -1907,15 +1966,14 @@ def handover_to_person_impl(
     if queue == "billing_specialist":
         reply_payload["verbatim_key"] = "transfer_to_specialist"
 
-    mock_res = _check_mock_mode("handover_to_person", state, resolved_lang, reference, reply_payload)
-    if mock_res:
-        return mock_res
-
-    return ok_reply(
+    reply = ok_reply(
         reply_payload,
         reference,
         language=resolved_lang,
     )
+    reply["mock_mode"] = _is_mock_mode(state)
+    reply["data"]["mock_mode"] = _is_mock_mode(state)
+    return reply
 
 
 # ============================================================================
@@ -1944,6 +2002,8 @@ def get_billing_summary_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("get_billing_summary", account_id)
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("get_billing_summary", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -2107,7 +2167,7 @@ def get_billing_summary_impl(
         "El método de pago indicado por el cliente se confirma y utiliza; ofrezca los métodos registrados solo si el cliente no indicó ninguno.",
     )
 
-    rep = ok_reply(
+    rep = _service_ok_reply(
         {
             "current_balance": display_amount(bal),
             "past_due_balance": display_amount(past_due),
@@ -2141,6 +2201,7 @@ def get_billing_summary_impl(
         },
         reference,
         language=lang,
+        state=state,
     )
     rep["agent_action"] = billing_action
     return rep
@@ -2178,6 +2239,8 @@ def process_bill_payment_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("process_bill_payment", account_id, str(amount))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("process_bill_payment", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -2429,10 +2492,11 @@ def process_bill_payment_impl(
         reply_data["requested_card_last4"] = l4
         reply_data["agent_action"] = new_card_action
 
-    rep = ok_reply(
+    rep = _service_ok_reply(
         reply_data,
         conf,
         language=lang,
+        state=state,
     )
     if is_new_card:
         rep["requested_card_last4"] = l4
@@ -2472,6 +2536,8 @@ def setup_payment_arrangement_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("setup_payment_arrangement", account_id, str(extension_days))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("setup_payment_arrangement", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -2543,10 +2609,11 @@ def setup_payment_arrangement_impl(
         "spoken_message": spoken_summary,
         "agent_action": arrangement_action,
     }
-    rep = ok_reply(
+    rep = _service_ok_reply(
         reply_data,
         arr_id,
         language=lang,
+        state=state,
     )
     rep["agent_action"] = arrangement_action
     rep["spoken_summary"] = spoken_summary
@@ -2591,6 +2658,8 @@ def setup_autopay_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("setup_autopay", account_id, str(action))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("setup_autopay", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -2623,7 +2692,7 @@ def setup_autopay_impl(
             f"Confirmez que le paiement automatique est annulé. {on_file_guidance}",
             f"Confirme que el pago automático está cancelado. {on_file_guidance}",
         )
-        rep = ok_reply(
+        rep = _service_ok_reply(
             {
                 "autopay_enrolled": False,
                 "cancelled": True,
@@ -2632,6 +2701,7 @@ def setup_autopay_impl(
             },
             reference,
             language=lang,
+            state=state,
         )
         rep["payment_methods_on_file"] = methods_on_file
         return rep
@@ -2841,7 +2911,7 @@ def setup_autopay_impl(
             f"confirmez la carte se terminant par {digits} nommée par le client; ne mentionnez pas d'autres cartes",
             f"confirme la tarjeta que termina en {digits} que el cliente nombró; no mencione otras tarjetas",
         )
-        rep = ok_reply(
+        rep = _service_ok_reply(
             {
                 "autopay_enrolled": True,
                 "autopay_enabled": True,
@@ -2860,6 +2930,7 @@ def setup_autopay_impl(
             },
             reference=ref,
             language=lang,
+            state=state,
         )
         rep["autopay_enabled"] = True
         rep["autopay_enrolled"] = True
@@ -2876,7 +2947,7 @@ def setup_autopay_impl(
         f"Confirmez que le paiement automatique est configuré; ne demandez plus les chiffres. {on_file_guidance}",
         f"Confirme que el pago automático está configurado; no vuelva a pedir dígitos. {on_file_guidance}",
     )
-    rep = ok_reply(
+    rep = _service_ok_reply(
         {
             "autopay_enrolled": True,
             "autopay_enabled": True,
@@ -2895,6 +2966,7 @@ def setup_autopay_impl(
         },
         reference=ref,
         language=lang,
+        state=state,
     )
     rep["autopay_enabled"] = True
     rep["autopay_enrolled"] = True
@@ -2936,6 +3008,8 @@ def process_refund_or_dispute_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("process_refund_or_dispute", account_id, str(amount))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("process_refund_or_dispute", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -2949,13 +3023,7 @@ def process_refund_or_dispute_impl(
     except Exception:
         limit_dec = Decimal("25.00")
 
-    mock_res = _check_mock_mode("process_refund_or_dispute", state, lang, reference, {
-        "approved": True,
-        "applied_amount": display_amount(limit_dec),
-        "confirmation_number": reference,
-    })
-    if mock_res:
-        return mock_res
+
 
     if outage_days in ("", 0, "0", 0.0):
         o_days = 0
@@ -3001,7 +3069,7 @@ def process_refund_or_dispute_impl(
         state["handoff_reason"] = "refund_threshold_exceeded"
         specialist_msg = spoken_line("transfer_to_specialist", lang)
         state["handoff_message"] = specialist_msg
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "approved": False,
                 "exceeds_self_serve_cap": True,
@@ -3016,6 +3084,7 @@ def process_refund_or_dispute_impl(
             },
             tkt,
             language=lang,
+        state=state,
         )
 
     cur_bal = Decimal(str(state.get("current_balance") or "0.00"))
@@ -3045,7 +3114,7 @@ def process_refund_or_dispute_impl(
         ok_payload["refund_type"] = "duplicate_payment"
         ok_payload["card_last4"] = state.get("card_last4", "7742")
 
-    return ok_reply(ok_payload, ref, language=lang)
+    return _service_ok_reply(ok_payload, ref, language=lang, state=state)
 
 
 # ============================================================================
@@ -3075,6 +3144,8 @@ def check_regional_outage_impl(
     pc = (str(postal_code or state.get("postal_code") or "")).strip().upper()
     reference = tracking_id("check_regional_outage", pc)
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("check_regional_outage", state, lang, reference)
 
     if not pc:
         return error_reply(
@@ -3117,7 +3188,7 @@ def check_regional_outage_impl(
             "Vous avez été abonné aux notifications de rétablissement par SMS.",
             "Se ha suscrito a las actualizaciones de restauración por SMS.",
         )
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "outage_active": True,
                 "region": "Region-A",
@@ -3128,10 +3199,11 @@ def check_regional_outage_impl(
             },
             reference,
             language=lang,
+        state=state,
         )
 
     offer_line = spoken_line("outage_none_offer_sms", lang)
-    return ok_reply(
+    return _service_ok_reply(
         {
             "outage_active": False,
             "network_status": "normal",
@@ -3152,6 +3224,7 @@ def check_regional_outage_impl(
         },
         reference,
         language=lang,
+    state=state,
     )
 
 
@@ -3179,6 +3252,12 @@ def run_troubleshooting_and_sms_impl(
     mock_err = _check_mock_error(state, lang)
     if mock_err:
         return mock_err
+
+    account_id = str(state.get("account_id") or "")
+    reference = tracking_id("run_troubleshooting_and_sms", account_id, str(service_type))
+    state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("run_troubleshooting_and_sms", state, lang, reference)
 
     if str(identifier or "").strip():
         l_res = lookup_account_impl(identifier=identifier, language=lang, state=state)
@@ -3260,10 +3339,11 @@ def run_troubleshooting_and_sms_impl(
         payload["agent_action"] = action_text
         payload["spoken_message"] = spoken_text
 
-    rep = ok_reply(
+    rep = _service_ok_reply(
         payload,
         ref,
         language=lang,
+    state=state,
     )
     if fallback_verbal:
         rep["agent_action"] = payload["agent_action"]
@@ -3322,6 +3402,8 @@ def get_appointment_and_ticket_status_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("get_appointment_and_ticket_status", account_id)
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("get_appointment_and_ticket_status", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -3424,10 +3506,11 @@ def get_appointment_and_ticket_status_impl(
             "Informer le client que le technicien est en retard avec une arrivée prévue entre 13 h 00 et 15 h 00, et proposer les plages de report disponibles.",
             "Informe al cliente que el técnico está retrasado con llegada entre la 1:00 PM y las 3:00 PM, y ofrezca las opciones de reprogramación disponibles.",
         )
-    return ok_reply(
+    return _service_ok_reply(
         reply_payload,
         reference,
         language=lang,
+    state=state,
     )
 
 
@@ -3464,6 +3547,8 @@ def manage_appointment_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("manage_appointment", account_id, str(action))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("manage_appointment", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -3495,7 +3580,7 @@ def manage_appointment_impl(
         prior_prompt_shown = bool(state.get("appointment_cancel_confirmed"))
         if not (user_conf and prior_prompt_shown):
             state["appointment_cancel_confirmed"] = True
-            return ok_reply(
+            return _service_ok_reply(
                 {
                     "requires_confirmation": True,
                     "appointment_cancelled": False,
@@ -3509,12 +3594,13 @@ def manage_appointment_impl(
                 },
                 reference,
                 language=lang,
+            state=state,
             )
 
         state["appointment_status"] = "cancelled"
         ref = tracking_id("CXL_APT", account_id)
         state["last_tracking_id"] = ref
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "appointment_cancelled": True,
                 "status": "cancelled",
@@ -3524,6 +3610,7 @@ def manage_appointment_impl(
             },
             ref,
             language=lang,
+        state=state,
         )
 
     # Reschedule
@@ -3590,7 +3677,7 @@ def manage_appointment_impl(
     win_key = "window_fr" if lang == "fr-CA" else ("window_es" if lang == "es-US" else "window_en")
     win = slot_match.get(win_key, slot_match.get("window_en", ""))
 
-    return ok_reply(
+    return _service_ok_reply(
         {
             "appointment_rescheduled": True,
             "appointment_id": state.get("active_appointment_id", "APT-4021"),
@@ -3603,6 +3690,7 @@ def manage_appointment_impl(
         },
         ref,
         language=lang,
+    state=state,
     )
 
 
@@ -3629,6 +3717,13 @@ def browse_plans_and_coverage_impl(
     mock_err = _check_mock_error(state, lang)
     if mock_err:
         return mock_err
+
+    cat = str(category or "internet").lower()
+    pc = (str(postal_code or state.get("postal_code") or "")).strip().upper()
+    reference = tracking_id("browse_plans_and_coverage", cat, pc)
+    state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("browse_plans_and_coverage", state, lang, reference)
 
     _record_audit(state)
 
@@ -3788,10 +3883,11 @@ def browse_plans_and_coverage_impl(
     if state.get("auth_status") == "pass":
         browse_payload["current_active_plans"] = _active_account_plans(state, lang)
 
-    return ok_reply(
+    return _service_ok_reply(
         browse_payload,
         ref,
         language=lang,
+    state=state,
     )
 
 
@@ -3828,6 +3924,8 @@ def commit_plan_or_order_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("commit_plan_or_order", account_id, str(plan_id or device_name))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("commit_plan_or_order", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -3980,10 +4078,11 @@ def commit_plan_or_order_impl(
         order_payload["combined_monthly_with_tv_starter_before_tax"] = display_amount(comb_before_tax)
         order_payload["combined_monthly_with_tv_starter_with_tax"] = display_amount(comb_with_tax)
 
-    return ok_reply(
+    return _service_ok_reply(
         order_payload,
         order_ref,
         language=lang,
+    state=state,
     )
 
 
@@ -4040,14 +4139,10 @@ def initiate_number_transfer_impl(
     account_id = str(state.get("account_id") or (ACCOUNTS[0]["account_id"] if ACCOUNTS else "ACC-0001"))
     reference = tracking_id("initiate_number_transfer", account_id, str(target_phone))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("initiate_number_transfer", state, lang, reference)
 
-    mock_res = _check_mock_mode("initiate_number_transfer", state, lang, reference, {
-        "status": "ok",
-        "mode": "transfer_submitted",
-        "port_in_request_id": reference,
-    })
-    if mock_res:
-        return mock_res
+
 
     action = str(kwargs.get("action") or kwargs.get("action_type") or kwargs.get("direction") or kwargs.get("transfer_type") or "").strip().lower()
     carrier_lower = carrier.lower()
@@ -4110,7 +4205,7 @@ def initiate_number_transfer_impl(
             "Émettez la divulgation textuelle contract_cancellation_fee_disclosure de la feuille de langue active, indiquez les frais d'annulation anticipée et l'estimation de facture finale au prorata, et expliquez la liste de contrôle de transfert requise.",
             "Emita la divulgación textual contract_cancellation_fee_disclosure de la hoja de idioma activo, indique el cargo por cancelación anticipada y el estimado de factura final prorrateada, y explique la lista de verificación de transferencia requerida.",
         )
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "status": "ok",
                 "mode": "checklist_provided",
@@ -4129,6 +4224,7 @@ def initiate_number_transfer_impl(
             },
             reference,
             language=lang,
+        state=state,
         )
 
     port_id = tracking_id("PRT", account_id, str(target_phone))
@@ -4187,7 +4283,7 @@ def initiate_number_transfer_impl(
     if is_port_out:
         data["mode"] = "port_out_details"
 
-    return ok_reply(data, port_id, language=lang)
+    return _service_ok_reply(data, port_id, language=lang, state=state)
 
 
 # ============================================================================
@@ -4222,14 +4318,10 @@ def manage_warranty_claim_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("manage_warranty_claim", account_id, str(issue_description))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("manage_warranty_claim", state, lang, reference)
 
-    mock_res = _check_mock_mode("manage_warranty_claim", state, lang, reference, {
-        "safety_hazard": True,
-        "claim_status": "urgent_safety_replacement",
-        "warranty_claim_id": tracking_id("SAF", account_id or "A1001"),
-    })
-    if mock_res:
-        return mock_res
+
 
     # Priority 1: Swollen battery hazard override
     desc_low = str(issue_description or "").lower()
@@ -4251,7 +4343,7 @@ def manage_warranty_claim_impl(
                 "Fournissez les consignes de sécurité immédiates (ne pas charger ni utiliser l'appareil), puis authentifiez l'appelant avant de soumettre la réclamation.",
                 "Proporcione instrucciones de seguridad inmediatas (no cargar ni usar el dispositivo), luego autentique al cliente antes de enviar el reclamo.",
             )
-            return ok_reply(
+            return _service_ok_reply(
                 {
                     "safety_hazard": True,
                     "claim_status": "pending_authentication",
@@ -4265,11 +4357,12 @@ def manage_warranty_claim_impl(
                 },
                 reference,
                 language=lang,
+            state=state,
             )
 
         claim_id = tracking_id("SAF", account_id or "A1001")
         state["warranty_claim_id"] = claim_id
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "safety_hazard": True,
                 "claim_status": "urgent_safety_replacement",
@@ -4284,6 +4377,7 @@ def manage_warranty_claim_impl(
             },
             claim_id,
             language=lang,
+        state=state,
         )
 
     _maybe_inline_auth(identifier, verification_code, lang, state)
@@ -4304,7 +4398,7 @@ def manage_warranty_claim_impl(
             "L'appareil présente-t-il un écran fissuré, un dommage physique ou une exposition à un liquide ?",
             "¿El dispositivo tiene la pantalla rota, daños físicos por caída o exposición a líquidos?",
         )
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "requires_damage_check": True,
                 "claim_submitted": False,
@@ -4315,10 +4409,11 @@ def manage_warranty_claim_impl(
             },
             reference,
             language=lang,
+        state=state,
         )
 
     if str(has_dmg).lower() in {"true", "1", "yes", "oui", "water", "liquid", "cracked"}:
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "warranty_covered": False,
                 "claim_status": "rejected_physical_or_liquid_damage",
@@ -4327,11 +4422,12 @@ def manage_warranty_claim_impl(
             },
             reference,
             language=lang,
+        state=state,
         )
 
     claim_id = tracking_id("RMA", account_id)
     state["warranty_claim_id"] = claim_id
-    return ok_reply(
+    return _service_ok_reply(
         {
             "warranty_covered": True,
             "claim_status": "approved",
@@ -4344,6 +4440,7 @@ def manage_warranty_claim_impl(
         },
         claim_id,
         language=lang,
+    state=state,
     )
 
 
@@ -4367,6 +4464,12 @@ def send_password_reset_sms_impl(
     mock_err = _check_mock_error(state, lang)
     if mock_err:
         return mock_err
+
+    account_id = str(state.get("account_id") or "")
+    reference = tracking_id("send_password_reset_sms", account_id)
+    state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("send_password_reset_sms", state, lang, reference)
 
     id_val = identifier if str(identifier or "").strip() else kwargs.get("phone_or_account", kwargs.get("account_id", kwargs.get("phone", kwargs.get("phone_number", ""))))
     if str(id_val or "").strip():
@@ -4459,7 +4562,7 @@ def send_password_reset_sms_impl(
             "Se ha enviado un enlace de restablecimiento al teléfono móvil registrado y es válido durante 30 minutes.",
         )
 
-    return ok_reply(
+    return _service_ok_reply(
         {
             "password_reset_sent": True,
             "delivery_channel": "sms",
@@ -4472,6 +4575,7 @@ def send_password_reset_sms_impl(
         },
         reference,
         language=lang,
+    state=state,
     )
 
 
@@ -4499,6 +4603,12 @@ def manage_mfa_settings_impl(
     mock_err = _check_mock_error(state, lang)
     if mock_err:
         return mock_err
+
+    account_id = str(state.get("account_id") or "")
+    reference = tracking_id("manage_mfa_settings", account_id, str(action))
+    state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("manage_mfa_settings", state, lang, reference)
 
     id_val: str | int | float = identifier
     caller_email = str(kwargs.get("email") or "").strip()
@@ -4654,10 +4764,11 @@ def manage_mfa_settings_impl(
                 rep_data["masked_backup_email"] = masked
             if already_sent:
                 rep_data["code_resent"] = True
-            reply = ok_reply(
+            reply = _service_ok_reply(
                 rep_data,
                 reference,
                 language=lang,
+            state=state,
             )
             reply["spoken_message"] = spoken
             reply["agent_action"] = action_text
@@ -4665,7 +4776,7 @@ def manage_mfa_settings_impl(
                 reply["code_resent"] = True
             return reply
         state["mfa_enabled"] = False
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "mfa_updated": True,
                 "mfa_enabled": False,
@@ -4678,6 +4789,7 @@ def manage_mfa_settings_impl(
             },
             reference,
             language=lang,
+        state=state,
         )
 
     if act == "enable":
@@ -4741,7 +4853,7 @@ def manage_mfa_settings_impl(
                 "Confirme que la autenticación de dos factores por mensaje de texto ya está habilitada en la cuenta, con códigos de respaldo generados.",
             )
 
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "mfa_updated": True,
                 "mfa_enabled": True,
@@ -4757,11 +4869,12 @@ def manage_mfa_settings_impl(
             },
             reference,
             language=lang,
+        state=state,
         )
 
     if act == "disable":
         state["mfa_enabled"] = False
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "mfa_updated": True,
                 "mfa_enabled": False,
@@ -4774,9 +4887,10 @@ def manage_mfa_settings_impl(
             },
             reference,
             language=lang,
+        state=state,
         )
 
-    return ok_reply(
+    return _service_ok_reply(
         {
             "mfa_updated": False,
             "mfa_enabled": bool(state.get("mfa_enabled")),
@@ -4784,6 +4898,7 @@ def manage_mfa_settings_impl(
         },
         reference,
         language=lang,
+    state=state,
     )
 
 
@@ -4795,7 +4910,7 @@ def execute_suspend_restore_impl(
     action: str = "suspend",
     reason: str = "vacation",
     target_date: str = "immediate",
-    caller_reported_payment: str | int | float = "",
+    caller_reported_payment: str | int | float | bool = "",
     identifier: str | int | float = "",
     verification_code: str | int | float = "",
     language: str = "",
@@ -4819,6 +4934,8 @@ def execute_suspend_restore_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("execute_suspend_restore", account_id, str(action))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("execute_suspend_restore", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -4911,7 +5028,7 @@ def execute_suspend_restore_impl(
                 f"Verifiqué su pago de ${pmt_amt} de ayer y restablecí su servicio.",
             )
 
-            return ok_reply(
+            return _service_ok_reply(
                 {
                     "status": "restored",
                     "service_restored": True,
@@ -4931,6 +5048,7 @@ def execute_suspend_restore_impl(
                 },
                 reference,
                 language=lang,
+            state=state,
             )
 
         session_restored = bool(state.get("service_restored") and not state.get("is_suspended", False))
@@ -4957,7 +5075,7 @@ def execute_suspend_restore_impl(
             state["suspension_reason"] = ""
             state["service_restored"] = True
             state["past_due_balance"] = "0.00"
-            return ok_reply(
+            return _service_ok_reply(
                 {
                     "status": "restored",
                     "service_restored": True,
@@ -4969,6 +5087,7 @@ def execute_suspend_restore_impl(
                 },
                 reference,
                 language=lang,
+            state=state,
             )
 
         action_text = localized_text(
@@ -4991,7 +5110,7 @@ def execute_suspend_restore_impl(
 
     state["is_suspended"] = True
     state["suspension_reason"] = clean_reason
-    return ok_reply(
+    return _service_ok_reply(
         {
             "service_suspended": True,
             "is_suspended": True,
@@ -5001,6 +5120,7 @@ def execute_suspend_restore_impl(
         },
         reference,
         language=lang,
+    state=state,
     )
 
 
@@ -5037,6 +5157,8 @@ def update_contact_profile_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("update_contact_profile", account_id)
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("update_contact_profile", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -5071,7 +5193,7 @@ def update_contact_profile_impl(
         "El precio de su plan actual se mantiene sin cambios en la dirección actualizada.",
     )
 
-    return ok_reply(
+    return _service_ok_reply(
         {
             "profile_updated": True,
             "updated_fields": upd,
@@ -5081,6 +5203,7 @@ def update_contact_profile_impl(
         },
         reference,
         language=lang,
+    state=state,
     )
 
 
@@ -5119,19 +5242,15 @@ def cancel_or_port_out_service_impl(
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("cancel_or_port_out_service", account_id, str(action_type))
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("cancel_or_port_out_service", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
 
     _record_audit(state)
 
-    mock_res = _check_mock_mode("cancel_or_port_out_service", state, lang, reference, {
-        "service_cancelled": True,
-        "cancellation_confirmation_id": reference,
-        "confirmation_number": reference,
-    })
-    if mock_res:
-        return mock_res
+
 
     monthly_rate = FAKE_BILLING_LEDGER["recent_line_items"][0]["amount"]
     rem_rates = localized_text(
@@ -5197,7 +5316,7 @@ def cancel_or_port_out_service_impl(
             "remaining_service_rates": rem_rates,
             "spoken_message": spoken,
         }
-        return ok_reply(res_retention, ret_id, language=lang)
+        return _service_ok_reply(res_retention, ret_id, language=lang, state=state)
 
     port_account = account_id if account_id else (ACCOUNTS[0]["account_id"] if ACCOUNTS else "ACC-0001")
     fx_pin = get_fixture_fact(state, "fx_pin_on_file")
@@ -5240,10 +5359,11 @@ def cancel_or_port_out_service_impl(
             data["porting_account_number"] = port_account
             data["action_type"] = "port_out"
             data["transfer_pin_withheld_pending_confirmation"] = True
-        return ok_reply(
+        return _service_ok_reply(
             data,
             reference,
             language=lang,
+        state=state,
         )
 
     state["service_cancelled"] = True
@@ -5269,7 +5389,7 @@ def cancel_or_port_out_service_impl(
         res["transfer_pin"] = transfer_pin
         res["porting_account_number"] = port_account
 
-    return ok_reply(res, cxl_id, language=lang)
+    return _service_ok_reply(res, cxl_id, language=lang, state=state)
 
 
 # Aliases for 22 domain tools

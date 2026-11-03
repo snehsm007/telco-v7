@@ -752,7 +752,7 @@
       "description": "Synthetic success eval toggle.",
       "schema": {
         "type": "STRING",
-        "default": "",
+        "default": "True",
         "required": []
       }
     },
