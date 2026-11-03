@@ -2,7 +2,7 @@
   "name": "8e205a66-3671-4b6f-a1ef-fade283a9577",
   "displayName": "sim__speak_immediate_french",
   "scenario": {
-    "task": "I want to speak to a French-speaking representative immediately\n\nUser Guide: On the first turn, say 'Je veux parler \u00e0 un repr\u00e9sentant' If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
+    "task": "I want to speak to a French-speaking representative immediately\n\nUser Guide: On the first turn, say 'Je veux parler à un représentant' If asked for phone/account number, provide 514-555-0199. If asked for 6-digit OTP code, provide 384920. If asked for 4-digit PIN, provide 4829.",
     "maxTurns": 10,
     "evaluationExpectations": [
       "eval_exp_c24a81a5"
@@ -10,9 +10,7 @@
     "rubrics": [],
     "scenarioExpectations": [],
     "userFacts": [],
-    "variableOverrides": {
-      "fx_pin_on_file": "4829"
-    }
+    "variableOverrides": {}
   },
   "tags": [
     "public",
