@@ -81,6 +81,7 @@ LAYERS   ?=
 PRIORITY ?=
 RUNS     ?=
 MODALITY ?= text
+SMOKE_MODALITY ?= $(if $(filter command line environment,$(origin MODALITY)),$(MODALITY),audio)
 TRIGGER  ?= local
 RUN_ID   ?= eval-$(shell date -u +%Y%m%d%H%M)-$(SHA7)
 REPORT   ?=
@@ -112,7 +113,7 @@ IMPACT = $(PYTHON) scripts/impact.py --env "$(ENV)" --source-dirs "$(APP_DIR),$(
 
 # run_evals.py flags shared by eval / smoke / bench-* (records go to $(HISTORY) for `make gate`)
 EVAL_COMMON = --app $(APP) --bench-dir $(BENCH_DIR) --eval-dir $(EVALS_DIR) --app-dir $(APP_DIR) \
-              --records $(HISTORY) --thresholds $(THRESHOLDS) --trigger $(TRIGGER) --modality $(MODALITY) \
+              --records $(HISTORY) --thresholds $(THRESHOLDS) --trigger $(TRIGGER) \
               $(if $(RUNS),--repeats $(RUNS))
 
 help: ## List targets
@@ -242,7 +243,7 @@ impact: ## Map git diff since the last clean full run to impacted evaluation IDs
 smoke-impact: need-app preflight ## Gate 1 on the pushed commit: impacted evals x 3, verdict recorded for its source fingerprint (FULL verdict: stops, run bench-full)
 	@targets=$$($(IMPACT) --app "$(APP)" --smoke-plan $(if $(BASE),--base $(BASE),)) || exit $$?; \
 	if [ -z "$$targets" ]; then exit 0; fi; \
-	$(RUN_EVALS) --smoke $(EVAL_COMMON) --targets "$$targets" --label smoke-$(SHA7) && \
+	$(RUN_EVALS) --smoke $(EVAL_COMMON) --modality $(SMOKE_MODALITY) --targets "$$targets" --label smoke-$(SHA7) && \
 	$(IMPACT) --record-smoke $(BENCH_DIR)/runs/smoke-$(SHA7).json
 
 push: need-app need-cxas bundle-check preflight ## Push $(APP_DIR) to ENV's app as version git-<sha7> (commit cxas_app/, lib/, evals/ first) and record it in history/last_push.json
@@ -295,7 +296,7 @@ preview-down: need-cxas ## Delete the throwaway app for PR=<n>
 
 # --- cloud: CI-style eval + gate (history/runs.jsonl) --------------------------------------
 eval: need-app ## Run evals on APP (TARGETS= or LAYERS=golden,sim,probe PRIORITY=P0; RUNS= RUN_ID= TRIGGER=) and append records to history/runs.jsonl
-	$(PYTHON) scripts/run_evals.py --mode staging $(EVAL_COMMON) --label $(RUN_ID) \
+	$(PYTHON) scripts/run_evals.py --mode staging $(EVAL_COMMON) --modality $(MODALITY) --label $(RUN_ID) \
 		$(if $(TARGETS),--targets "$(TARGETS)") $(if $(LAYERS),--layers $(LAYERS)) $(if $(PRIORITY),--priority $(PRIORITY))
 
 gate: ## PASS / FAIL / INCONCLUSIVE for RUN_ID from history/runs.jsonl, incl. strict 3/3 >= strict_pass_rate (exit 0 / 1 / 3)
@@ -317,16 +318,16 @@ bench-dry: need-app ## Print the plan for TARGETS (or all) without cloud calls
 
 bench-smoke: need-app preflight ## Gate 1: TARGETS=VE-01,VE-02 x 3 repeats, go/no-go verdict (measured median about 6 min)
 	@test -n "$(TARGETS)" || (echo "Usage: make bench-smoke ENV=staging TARGETS=VE-01,VE-02" >&2; exit 1)
-	$(RUN_EVALS) --smoke $(EVAL_COMMON) --targets "$(TARGETS)" --label smoke-$(SHA7)
+	$(RUN_EVALS) --smoke $(EVAL_COMMON) --modality $(SMOKE_MODALITY) --targets "$(TARGETS)" --label smoke-$(SHA7)
 
 bench-unstable: need-app preflight ## Gate 2: $(UNSTABLE_SET) x 5 repeats (~15-25 min)
 	@test -s "$(UNSTABLE_SET)" && grep -v '^[[:space:]]*\(#\|$$\)' "$(UNSTABLE_SET)" | grep -q . || (echo "ERROR: $(UNSTABLE_SET) is missing or has no uncommented eval IDs (one eval id or display name per line)" >&2; exit 1)
-	$(RUN_EVALS) --unstable $(EVAL_COMMON) --unstable-set $(UNSTABLE_SET) --label unstable-$(SHA7)
+	$(RUN_EVALS) --unstable $(EVAL_COMMON) --modality $(MODALITY) --unstable-set $(UNSTABLE_SET) --label unstable-$(SHA7)
 
 bench-full: need-app preflight ## Gate 3: every eval x 3 on the pushed commit after a passing smoke-impact (SKIP_SMOKE_GATE=1 REASON="..." overrides); writes history/bench/full-<sha7>.json, rebuilds the impact map, prints Gate 3 (measured 11-29 min, median about 16)
 	@$(IMPACT) --app "$(APP)" --check-bench-full --bench-dir "$(BENCH_DIR)" \
 		$(if $(filter 1 true yes,$(SKIP_SMOKE_GATE) $(SKIP_IMPACT)),--skip-smoke-gate --reason "$(REASON)",)
-	PARALLEL_BATCHES=$(PARALLEL_BATCHES) $(RUN_EVALS) --full $(EVAL_COMMON) --label full-$(SHA7)
+	PARALLEL_BATCHES=$(PARALLEL_BATCHES) $(RUN_EVALS) --full $(EVAL_COMMON) --modality $(MODALITY) --label full-$(SHA7)
 	@mkdir -p history/bench
 	$(PYTHON) scripts/bench_summary.py "$(BENCH_DIR)/runs/full-$(SHA7).json" --bench-dir $(BENCH_DIR) --out-dir history/bench
 	@$(IMPACT) --build-map

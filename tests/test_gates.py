@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from scripts import bench_summary, impact
+from scripts import bench_summary, impact, run_bench
 from suite import gate
 
 APP = "projects/p/locations/us/apps/a1"
@@ -470,3 +470,78 @@ def test_gate_placeholder_model_is_a_note_not_a_failure() -> None:
     assert result["verdict"] == "PASS"
     assert any("measured_on_model" in note for note in result["notes"])
     assert "measured_on_model" in gate.to_markdown(result, "r1")
+
+
+def test_classify_audio_mode_pass_when_goal_and_expectations_satisfied() -> None:
+    rec = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 1, "explanation": "satisfied"},
+            "all_expectations_satisfied": True,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 1}],
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert run_bench.classify(rec, modality="text") == ("FAIL", "")
+    assert run_bench.classify(rec, modality="audio") == ("PASS", "")
+
+
+def test_classify_audio_mode_fail_on_expectation_miss() -> None:
+    rec = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 1},
+            "all_expectations_satisfied": False,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 2}],
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert run_bench.classify(rec, modality="audio") == ("FAIL", "")
+
+
+def test_classify_audio_mode_fail_on_goal_zero() -> None:
+    rec = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 0},
+            "all_expectations_satisfied": True,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 1}],
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert run_bench.classify(rec, modality="audio") == ("FAIL", "")
+
+
+def test_classify_audio_mode_fail_on_hallucination_failure() -> None:
+    rec = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 1},
+            "all_expectations_satisfied": True,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 1}],
+            "hallucination_result": [{"score": 1}, {"score": 0}],
+        },
+    }
+    assert run_bench.classify(rec, modality="audio") == ("FAIL", "")
+
+
+def test_classify_audio_mode_preserves_golden_behavior() -> None:
+    rec = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "raw": {"golden_result": {"turn_replay_results": []}},
+    }
+    assert run_bench.classify(rec, modality="audio") == ("FAIL", "")

@@ -108,7 +108,7 @@ RETRY_DELAYS_S = (15, 45, 90)
 POLL_INTERVAL_S = 30
 # A 20-eval x 5 run (100 conversations) has taken 38-46+ min. The ceiling only exists to
 # catch a run that never ends; a run that hit it is continued with --resume-run.
-RUN_TIMEOUT_S = 150 * 60
+RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "14400"))
 JUDGE_KEYS = (
     "all_expectations_satisfied",
     "task_completed",
@@ -571,22 +571,43 @@ def sync_bench(cloud: Cloud, app_name: str, expectations: list[dict], evaluation
         if dname in existing:
             ex_ev = existing[dname]
             ex_refs = list(getattr(ex_ev.scenario, "evaluation_expectations", []) or [])
-            if all(r.startswith("projects/") for r in ex_refs):
+            ex_vo_raw = getattr(getattr(ex_ev, "scenario", None), "variable_overrides", {})
+            ex_vo = {str(k): str(v) for k, v in ex_vo_raw.items()} if hasattr(ex_vo_raw, "items") else {}
+            target_vo_raw = (data.get("scenario") or {}).get("variableOverrides") or {}
+            target_vo = {str(k): str(v) for k, v in target_vo_raw.items()} if hasattr(target_vo_raw, "items") else {}
+            target_refs = list((data.get("scenario") or {}).get("evaluationExpectations") or [])
+
+            vo_differs = (ex_vo != target_vo)
+            refs_differ = (ex_refs != target_refs) or not all(r.startswith("projects/") for r in ex_refs)
+
+            if not vo_differs and not refs_differ:
                 eval_by_name[dname] = ex_ev
                 continue
+
             data["name"] = ex_ev.name
             proto = types_mod.Evaluation()
             parse_dict(data, proto._pb, ignore_unknown_fields=True)
-            eval_by_name[dname] = cloud.call(
-                "WRITE",
-                "Evaluations.update_evaluation",
-                ex_ev.name,
-                f"bench: relink expectation resource names on {ve_id}",
-                lambda proto=proto: cloud.evals.update_evaluation(evaluation=proto, app_name=app_name),
-                describe=lambda u: f"updated {u.name}",
-                write=True,
-            )
-            continue
+            try:
+                eval_by_name[dname] = cloud.call(
+                    "WRITE",
+                    "Evaluations.update_evaluation",
+                    ex_ev.name,
+                    f"bench: update variableOverrides or expectations on {ve_id}",
+                    lambda proto=proto: cloud.evals.update_evaluation(evaluation=proto, app_name=app_name),
+                    describe=lambda u: f"updated {u.name}",
+                    write=True,
+                )
+                continue
+            except Exception:
+                cloud.call(
+                    "WRITE",
+                    "Evaluations.delete_evaluation",
+                    ex_ev.name,
+                    f"bench: delete existing {ve_id} before recreate",
+                    lambda: cloud.evals.delete_evaluation(ex_ev.name),
+                    describe=lambda d: f"deleted {ex_ev.name}",
+                    write=True,
+                )
 
         data.pop("name", None)
         proto = types_mod.Evaluation()
@@ -867,18 +888,64 @@ def conversation_digest(conv: dict) -> tuple[list[str], list[dict], list[dict]]:
     return lines, tools, fallbacks
 
 
-def classify(record: dict) -> tuple[str, str]:
+def classify(record: dict, modality: str = "text") -> tuple[str, str]:
     """(PASS | FAIL | INFRA, reason). Only a completed, judged result can pass or fail."""
     state, status = record["execution_state"], record["evaluation_status"]
     if state != "COMPLETED":
         return "INFRA", f"execution_state={state}"
     if status == "PASS":
         return "PASS", ""
-    if status != "FAIL":
-        return "INFRA", f"not scored (evaluation_status={status})"
     infra = [f["reason"] for f in record.get("fallback_reasons", []) if INFRA_PATTERN.search(f["reason"])]
     if infra:
         return "INFRA", f"platform fallback: {infra[0][:300]}"
+    if status != "FAIL":
+        return "INFRA", f"not scored (evaluation_status={status})"
+    if modality == "audio":
+        raw = record.get("raw") if isinstance(record.get("raw"), dict) else {}
+        is_golden = bool(record.get("golden_result") or raw.get("golden_result"))
+        sr = record.get("scenario_result") or raw.get("scenario_result")
+        if not is_golden and isinstance(sr, dict) and sr:
+            # (a) user_goal_satisfaction_result.score == 1
+            goal = sr.get("user_goal_satisfaction_result")
+            goal_score = goal.get("score") if isinstance(goal, dict) else None
+            goal_ok = (goal_score == 1)
+
+            # (b) all expectations passed (all_expectations_satisfied is True,
+            # or every item in evaluation_expectation_results passed when no expectations failed)
+            all_exp = sr.get("all_expectations_satisfied")
+            if all_exp is True:
+                exp_ok = True
+            else:
+                exp_results = sr.get("evaluation_expectation_results")
+                if isinstance(exp_results, list) and exp_results:
+                    exp_ok = all(
+                        isinstance(er, dict)
+                        and (
+                            er.get("passed") is True
+                            or er.get("outcome") in (1, "PASS", "OUTCOME_PASS")
+                            or er.get("score") == 1
+                        )
+                        for er in exp_results
+                    )
+                else:
+                    exp_ok = False
+
+            # (c) zero hallucination failures (no turn in hallucination_result has score == 0)
+            hal = sr.get("hallucination_result")
+            has_hallucination = False
+            if isinstance(hal, list):
+                has_hallucination = any(isinstance(tr, dict) and tr.get("score") == 0 for tr in hal)
+            elif isinstance(hal, dict):
+                if hal.get("score") == 0:
+                    has_hallucination = True
+                turn_results = hal.get("turn_results")
+                if isinstance(turn_results, list):
+                    has_hallucination = has_hallucination or any(
+                        isinstance(tr, dict) and tr.get("score") == 0 for tr in turn_results
+                    )
+
+            if goal_ok and exp_ok and not has_hallucination:
+                return "PASS", ""
     return "FAIL", ""
 
 
@@ -914,7 +981,7 @@ def tool_errors(tool_calls: list[dict]) -> list[dict]:
     return out
 
 
-def attach_conversations(cloud: Cloud, records: list[dict], label: str, all_results: bool = False) -> None:
+def attach_conversations(cloud: Cloud, records: list[dict], label: str, all_results: bool = False, modality: str = "text") -> None:
     """Fetch the conversation of every non-passing result (one logged call each), then classify all.
 
     With `all_results` (Gate 1 smoke runs) passing results are fetched too, because the gate rule
@@ -950,7 +1017,7 @@ def attach_conversations(cloud: Cloud, records: list[dict], label: str, all_resu
             rec.get("raw"), rec["conversation"], rec["tool_calls"]
         )
     for rec in records:
-        rec["classification"], rec["classification_reason"] = classify(rec)
+        rec["classification"], rec["classification_reason"] = classify(rec, modality=modality)
 
 
 def scored_statuses(records: list[dict], runs: int) -> list[str]:
@@ -1451,7 +1518,7 @@ def run_bench(cloud: Cloud, opts, expectations: list[dict], evaluations: list[di
             cloud, app_name, names, run_count, label, raw_dir, resume_run_name, modality=modality
         )
         new = build_records(results, display_of, index, round_no, run_name)
-        attach_conversations(cloud, new, label, all_results=is_smoke)
+        attach_conversations(cloud, new, label, all_results=is_smoke, modality=modality)
         with batch_lock:
             records.extend(new)
             run_details.append(
@@ -1664,7 +1731,7 @@ def _write_json(path: Path, payload: dict) -> None:
 
 
 def refetch_runs(cloud: Cloud, app_name: str, run_names: list[str], index: dict[str, dict], label: str,
-                 runs_dir: Path) -> dict:
+                 runs_dir: Path, modality: str = "text") -> dict:
     listed = list_all_evaluations(cloud, app_name, f"{label}: map evaluation resources to ids")
     display_of = {ev.name: ev.display_name for ev in listed}
     records: list[dict] = []
@@ -1683,7 +1750,7 @@ def refetch_runs(cloud: Cloud, app_name: str, run_names: list[str], index: dict[
                   {"label": label, "evaluation_run": run_name, "run": to_plain(run), "results": results})
         records.extend(build_records(results, display_of, index, 0, run_name))
         runs.append({"evaluation_run": run_name, "state": _enum_name(run.state, RUN_STATES), "results": len(results)})
-    attach_conversations(cloud, records, label)
+    attach_conversations(cloud, records, label, modality=modality)
     failing_dir = runs_dir / "failing_runs_data" / label
     inventory = write_failing_runs(records, failing_dir, label)
     return {"runs": runs, "records": records, "failing_dir": failing_dir, "inventory": inventory}
@@ -1745,7 +1812,7 @@ def fetch_runs_mode(args, index: dict[str, dict], runs_dir: Path) -> int:
     try:
         app = resolve_app(cloud, args)
         run_names = [t if t.startswith("projects/") else f"{app.name}/evaluationRuns/{t}" for t in tokens]
-        result = refetch_runs(cloud, app.name, run_names, index, label, runs_dir)
+        result = refetch_runs(cloud, app.name, run_names, index, label, runs_dir, modality=getattr(args, "modality", "text") or "text")
     except ReauthRequired as exc:
         print(f"STOP: credentials need a re-login ({exc}); no further cloud calls.", file=sys.stderr)
         return 3
@@ -1941,6 +2008,112 @@ def _self_test() -> int:
     assert (o2["verdict"], o2["infra_runs"], o2["avg_pass_turns"]) == ("INCONCLUSIVE", 2, None)
     rec_fallback = dict(records[1], fallback_reasons=[{"turn": 1, "span": "s", "reason": "429 quota exceeded"}])
     assert classify(rec_fallback)[0] == "INFRA"
+
+    # Audio-mode scoring: goalScore==1 AND allExpectationsSatisfied AND no hallucination failures
+    rec_audio_pass = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 1, "explanation": "satisfied"},
+            "all_expectations_satisfied": True,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 1}],
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert classify(rec_audio_pass, modality="text") == ("FAIL", "")
+    assert classify(rec_audio_pass, modality="audio") == ("PASS", "")
+
+    # Audio pass via evaluation_expectation_results when all_expectations_satisfied is missing/False
+    rec_audio_exp_fallback = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 1},
+            "all_expectations_satisfied": False,
+            "evaluation_expectation_results": [{"prompt": "p1", "outcome": 1}, {"prompt": "p2", "score": 1}],
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert classify(rec_audio_exp_fallback, modality="audio") == ("PASS", "")
+
+    # Audio FAIL on expectation miss
+    rec_audio_exp_fail = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 1},
+            "all_expectations_satisfied": False,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 2}],
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert classify(rec_audio_exp_fail, modality="audio") == ("FAIL", "")
+
+    # Audio FAIL on goal=0
+    rec_audio_goal_fail = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 0},
+            "all_expectations_satisfied": True,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 1}],
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert classify(rec_audio_goal_fail, modality="audio") == ("FAIL", "")
+
+    # Audio FAIL on hallucination_result score=0
+    rec_audio_hal_fail = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "scenario_result": {
+            "task_completed": False,
+            "user_goal_satisfaction_result": {"score": 1},
+            "all_expectations_satisfied": True,
+            "evaluation_expectation_results": [{"prompt": "p", "outcome": 1}],
+            "hallucination_result": [{"score": 1}, {"score": 0}],
+        },
+    }
+    assert classify(rec_audio_hal_fail, modality="audio") == ("FAIL", "")
+
+    # Audio mode preserves golden behavior (does not override golden FAIL to PASS)
+    rec_audio_golden = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [],
+        "raw": {"golden_result": {"turn_replay_results": []}},
+    }
+    assert classify(rec_audio_golden, modality="audio") == ("FAIL", "")
+
+    # Audio mode preserves platform fallback INFRA
+    rec_audio_infra = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "FAIL",
+        "fallback_reasons": [{"reason": "503 service unavailable"}],
+        "scenario_result": {
+            "user_goal_satisfaction_result": {"score": 1},
+            "all_expectations_satisfied": True,
+            "hallucination_result": [{"score": 1}],
+        },
+    }
+    assert classify(rec_audio_infra, modality="audio")[0] == "INFRA"
+
+    # Audio mode preserves PASS when evaluation_status == PASS
+    rec_audio_already_pass = {
+        "execution_state": "COMPLETED",
+        "evaluation_status": "PASS",
+        "fallback_reasons": [],
+    }
+    assert classify(rec_audio_already_pass, modality="audio") == ("PASS", "")
 
     # 3. payload shape (what bench_summary / build_dashboard read) + smoke gate + md
     class Opts:
