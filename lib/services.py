@@ -144,9 +144,15 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:
     has_state_dict = callable(getattr(state, "get", None))
     current = ""
     if has_state_dict:
-        existing = state.get("language")
+        existing = (
+            state.get("language")
+            or state.get("fx_language")
+            or state.get("preferred_language")
+        )
         if existing and str(existing).strip():
             current = resolve_copy_locale(str(existing))
+            if not state.get("language") and current != "en-US":
+                state["language"] = current
 
     arg_lang = ""
     if language and str(language).strip():
@@ -2323,7 +2329,15 @@ def process_bill_payment_impl(
         )
     )
     def_c4_b = str(state.get("card_last4") or "7742")[-4:]
+    sec_c4_b = str(FAKE_BILLING_LEDGER.get("secondary_card_last4") or "8844")[-4:]
     def_b4_b = str(state.get("bank_last4") or "6789")[-4:]
+    payment_methods_on_file = [
+        {"type": "card", "last4": def_c4_b, "primary": True},
+        {"type": "card", "last4": sec_c4_b, "primary": False},
+        {"type": "bank", "last4": def_b4_b, "primary": False},
+    ]
+    stored_methods = {m["last4"] for m in payment_methods_on_file} | {"4242"}
+
     provided_method = bank_last4 if is_bank else (card_last4 or bank_last4)
     l4_parsed = _extract_last4(provided_method)
     if l4_parsed is None:
@@ -2336,19 +2350,47 @@ def process_bill_payment_impl(
     is_new_card = not is_bank and any(
         w in pm_low for w in ("new", "nouvelle", "nouveau", "nueva", "capture", "keypad", "clavier")
     )
+    has_card_token = bool(state.get("card_token"))
+    has_card_capture = bool(state.get("card_capture_prompted"))
+    has_named_card = bool(str(card_last4 or "").strip())
+    has_named_bank = bool(str(bank_last4 or "").strip())
+    has_named_method = has_named_bank if is_bank else has_named_card
 
     fx_card_status = get_fixture_fact(state, "fx_card_on_file_status")
-    first_card_attempt = (
-        not is_bank
-        and (int(state.get("payment_failure_count") or 0) == 0)
-        and not state.get("declined_card_last4")
-    )
+    declined_last4 = str(state.get("declined_card_last4") or "")
+    current_failures = int(state.get("payment_failure_count") or 0)
+    first_attempt = (current_failures == 0) and not declined_last4
+
     is_card_on_file_declined_fixture = (
-        str(fx_card_status).strip().lower() == "declined"
-        and first_card_attempt
+        not is_bank
+        and str(fx_card_status).strip().lower() == "declined"
+        and first_attempt
     )
 
-    if l4 in DECLINED_CARD_LAST4 or is_card_on_file_declined_fixture:
+    card_not_on_file = (
+        not is_bank
+        and has_named_card
+        and (l4 not in stored_methods)
+        and not is_new_card
+        and not has_card_token
+        and not has_card_capture
+    )
+
+    bank_declined = is_bank and l4 in {"0000", "000000"}
+
+    repeat_declined_card = bool(declined_last4 and (l4 == declined_last4))
+
+    if not first_attempt and declined_last4 and (l4 != declined_last4 or is_bank):
+        is_declined = False
+    else:
+        is_declined = (
+            is_card_on_file_declined_fixture
+            or card_not_on_file
+            or bank_declined
+            or repeat_declined_card
+        )
+
+    if is_declined:
         failures = read_count(state, "payment_failure_count") + 1
         state["payment_failure_count"] = failures
         if is_bank:
@@ -2371,11 +2413,17 @@ def process_bill_payment_impl(
             )
         declined_msg = localized_text(
             lang,
-            f"The card on file ending in {l4} was declined. Please provide an alternate card or bank account to complete your payment.",
-            f"La carte au dossier se terminant par {l4} a été refusée. Veuillez fournir une autre carte ou un compte bancaire pour effectuer votre paiement.",
-            f"La tarjeta registrada que termina en {l4} fue rechazada. Por favor proporcione una tarjeta alternativa o cuenta bancaria para completar su pago.",
+            f"The card ending in {l4} was declined. Please provide an alternate card or payment method on file to complete your payment.",
+            f"La carte se terminant par {l4} a été refusée. Veuillez fournir une autre carte ou un mode de paiement au dossier pour effectuer votre paiement.",
+            f"La tarjeta que termina en {l4} fue rechazada. Por favor proporcione otra tarjeta o método de pago registrado para completar su pago.",
         )
-        return error_reply(
+        agent_act = localized_text(
+            lang,
+            f"Inform the caller that the card ending in {l4} was declined. Offer the payment methods on file returned by the tool, or ask for a different card.",
+            f"Informez le client que la carte se terminant par {l4} a été refusée. Proposez les modes de paiement au dossier retournés par l'outil, ou demandez une autre carte.",
+            f"Informe al cliente que la tarjeta que termina en {l4} fue rechazada. Ofrezca los métodos de pago registrados devueltos por la herramienta o solicite una tarjeta diferente.",
+        )
+        rep = error_reply(
             "PAYMENT_DECLINED",
             reference=reference,
             language=lang,
@@ -2386,15 +2434,19 @@ def process_bill_payment_impl(
                 "declined_card_last4": l4,
                 "payment_declined_once": True,
                 "card_on_file_status": "declined",
+                "payment_methods_on_file": payment_methods_on_file,
                 "spoken_message": declined_msg,
-                "agent_action": localized_text(
-                    lang,
-                    "Inform the caller that the card on file was declined, and ask for an alternate card or bank account details.",
-                    "Informer le client que la carte au dossier a été refusée et demander une autre carte ou des coordonnées bancaires.",
-                    "Informe al cliente que la tarjeta registrada fue rechazada y solicite una tarjeta alternativa o detalles de una cuenta bancaria.",
-                ),
+                "agent_action": agent_act,
             },
         )
+        rep["payment_methods_on_file"] = payment_methods_on_file
+        rep["agent_action"] = agent_act
+        rep["spoken_message"] = declined_msg
+        return rep
+
+    if declined_last4 and (l4 != declined_last4 or is_bank):
+        state["payment_failure_count"] = 0
+        state["declined_card_last4"] = ""
 
     past_due_raw = str(state.get("past_due_balance") or "0.00").strip()
     try:

@@ -187,6 +187,8 @@ def error_reply(
     """Build an error reply envelope with localized messaging."""
     if code not in ERROR_CODES:
         raise ValueError(f"unknown error code {code!r}; add it to ERROR_CODES first")
+    if not language and data and callable(getattr(data, "get", None)):
+        language = data.get("language") or data.get("fx_language") or data.get("preferred_language")
     loc = resolve_copy_locale(language)
     loc_defaults = LOCALIZED_ERROR_DEFAULTS.get(loc, LOCALIZED_ERROR_DEFAULTS["en-US"])
     default_msg, default_action = loc_defaults.get(

@@ -901,6 +901,15 @@
       }
     },
     {
+      "name": "fx_language",
+      "description": "Evaluation fixture override for session language code.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
       "name": "locked_accounts",
       "description": "List of account IDs locked out by excessive failed authentication attempts.",
       "schema": {

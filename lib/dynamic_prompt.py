@@ -854,7 +854,12 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
 
     is_locked = bool(state_dict.get("language_locked", False)) if has_state else False
     locked = (
-        str(state_dict.get("language") or "").strip()
+        str(
+            state_dict.get("language")
+            or state_dict.get("fx_language")
+            or state_dict.get("preferred_language")
+            or ""
+        ).strip()
         if has_state
         else ""
     )
@@ -866,7 +871,11 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
             locked = relayed
 
     explicit_in_state = (
-        str(state_dict.get("explicit_language_switch") or "").strip()
+        str(
+            state_dict.get("explicit_language_switch")
+            or state_dict.get("fx_language")
+            or ""
+        ).strip()
         if has_state
         else ""
     )

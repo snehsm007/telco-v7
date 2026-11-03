@@ -10,7 +10,8 @@ def test_default_prompt_guardrail_language_aware() -> None:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
-    assert data.get("enabled") is True
+    # ADR-28: Default Prompt Guardrail is disabled to eliminate credential exposure false-positives and ~0.5s per-turn latency
+    assert data.get("enabled") is False, "Default Prompt Guardrail must remain disabled (enabled: false) per ADR-28"
     assert "generativeAnswer" in data.get("action", {})
     prompt = data["action"]["generativeAnswer"].get("prompt", "")
     assert len(prompt) > 0
@@ -29,7 +30,8 @@ def test_default_safety_guardrail_language_aware() -> None:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
-    assert data.get("enabled") is True
+    # Default Safety Guardrail remains enabled
+    assert data.get("enabled") is True, "Default Safety Guardrail must remain enabled"
     assert "generativeAnswer" in data.get("action", {})
     prompt = data["action"]["generativeAnswer"].get("prompt", "")
     assert len(prompt) > 0

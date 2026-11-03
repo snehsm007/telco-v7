@@ -172,6 +172,31 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {
         "fr-CA": "Je peux uniquement vous aider avec les services de télécommunications et les demandes de compte Telco. Merci de votre appel, au revoir.",
         "es-US": "Solo puedo ayudarle con servicios de telecomunicaciones y solicitudes de cuenta de Telco. Gracias por llamar, hasta luego.",
     },
+    "no_input_reprompt": {
+        "en-US": "I didn't hear anything. Could you please repeat that?",
+        "fr-CA": "Je n'ai rien entendu. Pourriez-vous répéter s'il vous plaît?",
+        "es-US": "No escuché nada. ¿Podría repetir por favor?",
+    },
+    "no_match_reprompt": {
+        "en-US": "I'm sorry, I didn't catch that. Could you please rephrase your request?",
+        "fr-CA": "Je m'excuse, je n'ai pas bien compris. Pourriez-vous reformuler votre demande s'il vous plaît?",
+        "es-US": "Lo siento, no entendí bien. ¿Podría reformular su solicitud por favor?",
+    },
+    "tool_error_apology": {
+        "en-US": "I apologize, our system is currently having trouble processing that request. Let me connect you with a representative who can assist.",
+        "fr-CA": "Je m'excuse, notre système a actuellement de la difficulté à traiter cette demande. Laissez-moi vous mettre en communication avec un représentant qui pourra vous aider.",
+        "es-US": "Le pido disculpas, nuestro sistema tiene problemas para procesar esa solicitud en este momento. Permítame comunicarle con un representante que pueda ayudarle.",
+    },
+    "keypad_recovery": {
+        "en-US": "I'm sorry — the keypad entry didn't come through on my end. Please say the number out loud, one digit at a time.",
+        "fr-CA": "Je m'excuse — la saisie au clavier n'a pas été captée de mon côté. Veuillez me dire le numéro à haute voix, un chiffre à la fois.",
+        "es-US": "Lo siento, la marcación en el teclado no se registró de mi lado. Por favor diga el número en voz alta, un dígito a la vez.",
+    },
+    "guardrail_rephrase": {
+        "en-US": "I apologize, could you please rephrase your request or share your account details so I can assist you?",
+        "fr-CA": "Je vous présente mes excuses, pourriez-vous reformuler votre demande ou partager les détails de votre compte afin que je puisse vous aider ?",
+        "es-US": "Le pido disculpas, ¿podría reformular su solicitud o compartir los detalles de su cuenta para que pueda ayudarle?",
+    },
 }
 
 
@@ -720,6 +745,10 @@ AGENT_VERBATIM_KEYS: dict[str, tuple[str, ...]] = {
         "business_handoff",
         "empathy_protocol",
         "malicious_closing",
+        "no_input_reprompt",
+        "no_match_reprompt",
+        "tool_error_apology",
+        "keypad_recovery",
     ),
     "billing": (
         "recording_notice",
@@ -731,6 +760,10 @@ AGENT_VERBATIM_KEYS: dict[str, tuple[str, ...]] = {
         "live_agent_handoff",
         "business_handoff",
         "empathy_protocol",
+        "no_input_reprompt",
+        "no_match_reprompt",
+        "tool_error_apology",
+        "keypad_recovery",
     ),
     "tech_support": (
         "recording_notice",
@@ -741,6 +774,10 @@ AGENT_VERBATIM_KEYS: dict[str, tuple[str, ...]] = {
         "live_agent_handoff",
         "business_handoff",
         "empathy_protocol",
+        "no_input_reprompt",
+        "no_match_reprompt",
+        "tool_error_apology",
+        "keypad_recovery",
     ),
     "sales_equipment": (
         "recording_notice",
@@ -751,6 +788,10 @@ AGENT_VERBATIM_KEYS: dict[str, tuple[str, ...]] = {
         "live_agent_handoff",
         "business_handoff",
         "empathy_protocol",
+        "no_input_reprompt",
+        "no_match_reprompt",
+        "tool_error_apology",
+        "keypad_recovery",
     ),
     "account": (
         "recording_notice",
@@ -761,6 +802,10 @@ AGENT_VERBATIM_KEYS: dict[str, tuple[str, ...]] = {
         "live_agent_handoff",
         "business_handoff",
         "empathy_protocol",
+        "no_input_reprompt",
+        "no_match_reprompt",
+        "tool_error_apology",
+        "keypad_recovery",
     ),
 }
 

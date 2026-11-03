@@ -28,6 +28,44 @@ _LAST4_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_FALLBACK_LEAKAGE_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"I apologize,?\s+could you please rephrase your request or share your account details so I can assist you\??",
+            re.IGNORECASE,
+        ),
+        "guardrail_rephrase",
+    ),
+    (
+        re.compile(
+            r"I'm sorry\s*—?\s*(?:the )?keypad entry didn't come through(?: on my end)?\.?\s*(?:Please say the number out loud,?\s*one digit at a time\.?)?",
+            re.IGNORECASE,
+        ),
+        "keypad_recovery",
+    ),
+    (
+        re.compile(
+            r"I didn't hear anything\.?\s*(?:Could you please repeat that\??)?",
+            re.IGNORECASE,
+        ),
+        "no_input_reprompt",
+    ),
+    (
+        re.compile(
+            r"(?:I'm sorry,?\s*)?(?:I didn't (?:quite )?catch that\.?\s*)?(?:Could you )?please rephrase (?:your request|that)\??",
+            re.IGNORECASE,
+        ),
+        "no_match_reprompt",
+    ),
+    (
+        re.compile(
+            r"I apologize,?\s+our system is currently having trouble processing that request\.?\s*(?:Let me connect you with a representative who can assist\.?)?",
+            re.IGNORECASE,
+        ),
+        "tool_error_apology",
+    ),
+)
+
 _SP_CARD_KWS: tuple[str, ...] = (
     "card",
     "carte",
@@ -290,6 +328,20 @@ def clean_agent_speech(
             return m.group(0)
 
         cleaned = _LAST4_CONTEXT_RE.sub(_replace_non_card_last4, cleaned)
+
+    session_lang = ""
+    if callable(getattr(session_params, "get", None)):
+        session_lang = (
+            str(session_params.get("language") or "").strip()
+            or str(session_params.get("fx_language") or "").strip()
+            or str(session_params.get("preferred_language") or "").strip()
+        )
+    loc = resolve_copy_locale(session_lang)
+    if loc in ("fr-CA", "es-US"):
+        for pattern, key in _FALLBACK_LEAKAGE_REPLACEMENTS:
+            if pattern.search(cleaned):
+                replacement = spoken_line(key, loc)
+                cleaned = pattern.sub(replacement, cleaned)
     return cleaned
 
 
@@ -322,7 +374,11 @@ def enforce_handover_utterance(
 
     reason = ""
     target_queue = ""
-    lang = params.get("language")
+    lang = (
+        params.get("language")
+        or params.get("fx_language")
+        or params.get("preferred_language")
+    )
     is_business = bool(params.get("business_flag"))
     for args in tool_args_list:
         if callable(getattr(args, "get", None)):

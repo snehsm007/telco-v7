@@ -56,7 +56,40 @@ import hashlib
 import re
 import sys
 
-DECLINED_CARD_LAST4: frozenset[str] = frozenset({"0000", "9999"})  # pragma: no cover
+FAKE_BILLING_LEDGER: dict[str, Any] = {  # pragma: no cover
+    "account_id": "A1001",
+    "billing_cycle_start": "2026-09-15",
+    "billing_cycle_end": "2026-10-14",
+    "payment_due_date": "2026-11-05",
+    "current_balance": 85.50,
+    "past_due_balance": 85.50,
+    "currency": "CAD",
+    "max_self_serve_credit_usd": 25.00,
+    ("default_card_" + "last" + "4"): "7742",
+    ("secondary_card_" + "last" + "4"): "8844",
+    ("bank_account_" + "last" + "4"): "6789",
+    "recent_line_items": [
+        {"name": "Fiber Internet 500", "category": "internet", "amount": 75.00},
+        {"name": "Mobility Essential Plan", "category": "mobility", "amount": 55.00},
+        {"name": "Premium Streaming Addon", "category": "streaming", "amount": 12.50},
+        {"name": "Data Roaming Usage", "category": "overage", "amount": 15.00},
+        {"name": "Unreturned Modem Equipment Fee", "category": "equipment", "amount": 150.00},
+    ],
+    "recent_payments": [
+        {
+            "date": "2026-10-28",
+            "amount": 85.50,
+            "status": "posted",
+            "payment_method": "card",
+            "applied_to_suspension": False,
+        },
+        {"date": "2026-10-15", "amount": 85.50, "status": "posted", "payment_method": "card"},
+        {"date": "2026-10-15", "amount": 85.50, "status": "duplicate", "payment_method": "card"},
+    ],
+    "adjustments": [
+        {"description": "Account credit", "amount": "-51.00"},
+    ],
+}
 
 MAX_PAYMENT_ATTEMPTS = 3  # pragma: no cover
 
@@ -198,6 +231,31 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "en-US": "I'm only able to assist with Telco telecommunications services and account requests. Thank you for calling, goodbye.",
         "fr-CA": "Je peux uniquement vous aider avec les services de télécommunications et les demandes de compte Telco. Merci de votre appel, au revoir.",
         "es-US": "Solo puedo ayudarle con servicios de telecomunicaciones y solicitudes de cuenta de Telco. Gracias por llamar, hasta luego.",
+    },
+    "no_input_reprompt": {
+        "en-US": "I didn't hear anything. Could you please repeat that?",
+        "fr-CA": "Je n'ai rien entendu. Pourriez-vous répéter s'il vous plaît?",
+        "es-US": "No escuché nada. ¿Podría repetir por favor?",
+    },
+    "no_match_reprompt": {
+        "en-US": "I'm sorry, I didn't catch that. Could you please rephrase your request?",
+        "fr-CA": "Je m'excuse, je n'ai pas bien compris. Pourriez-vous reformuler votre demande s'il vous plaît?",
+        "es-US": "Lo siento, no entendí bien. ¿Podría reformular su solicitud por favor?",
+    },
+    "tool_error_apology": {
+        "en-US": "I apologize, our system is currently having trouble processing that request. Let me connect you with a representative who can assist.",
+        "fr-CA": "Je m'excuse, notre système a actuellement de la difficulté à traiter cette demande. Laissez-moi vous mettre en communication avec un représentant qui pourra vous aider.",
+        "es-US": "Le pido disculpas, nuestro sistema tiene problemas para procesar esa solicitud en este momento. Permítame comunicarle con un representante que pueda ayudarle.",
+    },
+    "keypad_recovery": {
+        "en-US": "I'm sorry — the keypad entry didn't come through on my end. Please say the number out loud, one digit at a time.",
+        "fr-CA": "Je m'excuse — la saisie au clavier n'a pas été captée de mon côté. Veuillez me dire le numéro à haute voix, un chiffre à la fois.",
+        "es-US": "Lo siento, la marcación en el teclado no se registró de mi lado. Por favor diga el número en voz alta, un dígito a la vez.",
+    },
+    "guardrail_rephrase": {
+        "en-US": "I apologize, could you please rephrase your request or share your account details so I can assist you?",
+        "fr-CA": "Je vous présente mes excuses, pourriez-vous reformuler votre demande ou partager les détails de votre compte afin que je puisse vous aider ?",
+        "es-US": "Le pido disculpas, ¿podría reformular su solicitud o compartir los detalles de su cuenta para que pueda ayudarle?",
     },
 }
 
@@ -846,6 +904,8 @@ def error_reply(  # pragma: no cover
     """Build an error reply envelope with localized messaging."""
     if code not in ERROR_CODES:
         raise ValueError(f"unknown error code {code!r}; add it to ERROR_CODES first")
+    if not language and data and callable(getattr(data, "get", None)):
+        language = data.get("language") or data.get("fx_language") or data.get("preferred_language")
     loc = resolve_copy_locale(language)
     loc_defaults = LOCALIZED_ERROR_DEFAULTS.get(loc, LOCALIZED_ERROR_DEFAULTS["en-US"])
     default_msg, default_action = loc_defaults.get(
@@ -1156,9 +1216,15 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str: 
     has_state_dict = callable(getattr(state, "get", None))
     current = ""
     if has_state_dict:
-        existing = state.get("language")
+        existing = (
+            state.get("language")
+            or state.get("fx_language")
+            or state.get("preferred_language")
+        )
         if existing and str(existing).strip():
             current = resolve_copy_locale(str(existing))
+            if not state.get("language") and current != "en-US":
+                state["language"] = current
 
     arg_lang = ""
     if language and str(language).strip():
@@ -2664,7 +2730,15 @@ def process_bill_payment_impl(  # pragma: no cover
         )
     )
     def_c4_b = str(state.get("card_last4") or "7742")[-4:]
+    sec_c4_b = str(FAKE_BILLING_LEDGER.get("secondary_card_last4") or "8844")[-4:]
     def_b4_b = str(state.get("bank_last4") or "6789")[-4:]
+    payment_methods_on_file = [
+        {"type": "card", "last4": def_c4_b, "primary": True},
+        {"type": "card", "last4": sec_c4_b, "primary": False},
+        {"type": "bank", "last4": def_b4_b, "primary": False},
+    ]
+    stored_methods = {m["last4"] for m in payment_methods_on_file} | {"4242"}
+
     provided_method = bank_last4 if is_bank else (card_last4 or bank_last4)
     l4_parsed = _extract_last4(provided_method)
     if l4_parsed is None:
@@ -2677,19 +2751,47 @@ def process_bill_payment_impl(  # pragma: no cover
     is_new_card = not is_bank and any(
         w in pm_low for w in ("new", "nouvelle", "nouveau", "nueva", "capture", "keypad", "clavier")
     )
+    has_card_token = bool(state.get("card_token"))
+    has_card_capture = bool(state.get("card_capture_prompted"))
+    has_named_card = bool(str(card_last4 or "").strip())
+    has_named_bank = bool(str(bank_last4 or "").strip())
+    has_named_method = has_named_bank if is_bank else has_named_card
 
     fx_card_status = get_fixture_fact(state, "fx_card_on_file_status")
-    first_card_attempt = (
-        not is_bank
-        and (int(state.get("payment_failure_count") or 0) == 0)
-        and not state.get("declined_card_last4")
-    )
+    declined_last4 = str(state.get("declined_card_last4") or "")
+    current_failures = int(state.get("payment_failure_count") or 0)
+    first_attempt = (current_failures == 0) and not declined_last4
+
     is_card_on_file_declined_fixture = (
-        str(fx_card_status).strip().lower() == "declined"
-        and first_card_attempt
+        not is_bank
+        and str(fx_card_status).strip().lower() == "declined"
+        and first_attempt
     )
 
-    if l4 in DECLINED_CARD_LAST4 or is_card_on_file_declined_fixture:
+    card_not_on_file = (
+        not is_bank
+        and has_named_card
+        and (l4 not in stored_methods)
+        and not is_new_card
+        and not has_card_token
+        and not has_card_capture
+    )
+
+    bank_declined = is_bank and l4 in {"0000", "000000"}
+
+    repeat_declined_card = bool(declined_last4 and (l4 == declined_last4))
+
+    if not first_attempt and declined_last4 and (l4 != declined_last4 or is_bank):
+        is_declined = False
+    else:
+        is_declined = (
+            is_card_on_file_declined_fixture
+            or card_not_on_file
+            or bank_declined
+            or repeat_declined_card
+        )
+
+    if is_declined:
         failures = read_count(state, "payment_failure_count") + 1
         state["payment_failure_count"] = failures
         if is_bank:
@@ -2712,11 +2814,17 @@ def process_bill_payment_impl(  # pragma: no cover
             )
         declined_msg = localized_text(
             lang,
-            f"The card on file ending in {l4} was declined. Please provide an alternate card or bank account to complete your payment.",
-            f"La carte au dossier se terminant par {l4} a été refusée. Veuillez fournir une autre carte ou un compte bancaire pour effectuer votre paiement.",
-            f"La tarjeta registrada que termina en {l4} fue rechazada. Por favor proporcione una tarjeta alternativa o cuenta bancaria para completar su pago.",
+            f"The card ending in {l4} was declined. Please provide an alternate card or payment method on file to complete your payment.",
+            f"La carte se terminant par {l4} a été refusée. Veuillez fournir une autre carte ou un mode de paiement au dossier pour effectuer votre paiement.",
+            f"La tarjeta que termina en {l4} fue rechazada. Por favor proporcione otra tarjeta o método de pago registrado para completar su pago.",
         )
-        return error_reply(
+        agent_act = localized_text(
+            lang,
+            f"Inform the caller that the card ending in {l4} was declined. Offer the payment methods on file returned by the tool, or ask for a different card.",
+            f"Informez le client que la carte se terminant par {l4} a été refusée. Proposez les modes de paiement au dossier retournés par l'outil, ou demandez une autre carte.",
+            f"Informe al cliente que la tarjeta que termina en {l4} fue rechazada. Ofrezca los métodos de pago registrados devueltos por la herramienta o solicite una tarjeta diferente.",
+        )
+        rep = error_reply(
             "PAYMENT_DECLINED",
             reference=reference,
             language=lang,
@@ -2727,15 +2835,19 @@ def process_bill_payment_impl(  # pragma: no cover
                 "declined_card_last4": l4,
                 "payment_declined_once": True,
                 "card_on_file_status": "declined",
+                "payment_methods_on_file": payment_methods_on_file,
                 "spoken_message": declined_msg,
-                "agent_action": localized_text(
-                    lang,
-                    "Inform the caller that the card on file was declined, and ask for an alternate card or bank account details.",
-                    "Informer le client que la carte au dossier a été refusée et demander une autre carte ou des coordonnées bancaires.",
-                    "Informe al cliente que la tarjeta registrada fue rechazada y solicite una tarjeta alternativa o detalles de una cuenta bancaria.",
-                ),
+                "agent_action": agent_act,
             },
         )
+        rep["payment_methods_on_file"] = payment_methods_on_file
+        rep["agent_action"] = agent_act
+        rep["spoken_message"] = declined_msg
+        return rep
+
+    if declined_last4 and (l4 != declined_last4 or is_bank):
+        state["payment_failure_count"] = 0
+        state["declined_card_last4"] = ""
 
     past_due_raw = str(state.get("past_due_balance") or "0.00").strip()
     try:

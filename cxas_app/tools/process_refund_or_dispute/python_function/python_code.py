@@ -230,6 +230,31 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "fr-CA": "Je peux uniquement vous aider avec les services de télécommunications et les demandes de compte Telco. Merci de votre appel, au revoir.",
         "es-US": "Solo puedo ayudarle con servicios de telecomunicaciones y solicitudes de cuenta de Telco. Gracias por llamar, hasta luego.",
     },
+    "no_input_reprompt": {
+        "en-US": "I didn't hear anything. Could you please repeat that?",
+        "fr-CA": "Je n'ai rien entendu. Pourriez-vous répéter s'il vous plaît?",
+        "es-US": "No escuché nada. ¿Podría repetir por favor?",
+    },
+    "no_match_reprompt": {
+        "en-US": "I'm sorry, I didn't catch that. Could you please rephrase your request?",
+        "fr-CA": "Je m'excuse, je n'ai pas bien compris. Pourriez-vous reformuler votre demande s'il vous plaît?",
+        "es-US": "Lo siento, no entendí bien. ¿Podría reformular su solicitud por favor?",
+    },
+    "tool_error_apology": {
+        "en-US": "I apologize, our system is currently having trouble processing that request. Let me connect you with a representative who can assist.",
+        "fr-CA": "Je m'excuse, notre système a actuellement de la difficulté à traiter cette demande. Laissez-moi vous mettre en communication avec un représentant qui pourra vous aider.",
+        "es-US": "Le pido disculpas, nuestro sistema tiene problemas para procesar esa solicitud en este momento. Permítame comunicarle con un representante que pueda ayudarle.",
+    },
+    "keypad_recovery": {
+        "en-US": "I'm sorry — the keypad entry didn't come through on my end. Please say the number out loud, one digit at a time.",
+        "fr-CA": "Je m'excuse — la saisie au clavier n'a pas été captée de mon côté. Veuillez me dire le numéro à haute voix, un chiffre à la fois.",
+        "es-US": "Lo siento, la marcación en el teclado no se registró de mi lado. Por favor diga el número en voz alta, un dígito a la vez.",
+    },
+    "guardrail_rephrase": {
+        "en-US": "I apologize, could you please rephrase your request or share your account details so I can assist you?",
+        "fr-CA": "Je vous présente mes excuses, pourriez-vous reformuler votre demande ou partager les détails de votre compte afin que je puisse vous aider ?",
+        "es-US": "Le pido disculpas, ¿podría reformular su solicitud o compartir los detalles de su cuenta para que pueda ayudarle?",
+    },
 }
 
 def resolve_copy_locale(language: str | None) -> str:  # pragma: no cover
@@ -877,6 +902,8 @@ def error_reply(  # pragma: no cover
     """Build an error reply envelope with localized messaging."""
     if code not in ERROR_CODES:
         raise ValueError(f"unknown error code {code!r}; add it to ERROR_CODES first")
+    if not language and data and callable(getattr(data, "get", None)):
+        language = data.get("language") or data.get("fx_language") or data.get("preferred_language")
     loc = resolve_copy_locale(language)
     loc_defaults = LOCALIZED_ERROR_DEFAULTS.get(loc, LOCALIZED_ERROR_DEFAULTS["en-US"])
     default_msg, default_action = loc_defaults.get(
@@ -1156,9 +1183,15 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str: 
     has_state_dict = callable(getattr(state, "get", None))
     current = ""
     if has_state_dict:
-        existing = state.get("language")
+        existing = (
+            state.get("language")
+            or state.get("fx_language")
+            or state.get("preferred_language")
+        )
         if existing and str(existing).strip():
             current = resolve_copy_locale(str(existing))
+            if not state.get("language") and current != "en-US":
+                state["language"] = current
 
     arg_lang = ""
     if language and str(language).strip():

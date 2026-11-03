@@ -135,6 +135,44 @@ from typing import Any
 import re
 import sys
 
+_FALLBACK_LEAKAGE_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (  # pragma: no cover
+    (
+        re.compile(
+            r"I apologize,?\s+could you please rephrase your request or share your account details so I can assist you\??",
+            re.IGNORECASE,
+        ),
+        "guardrail_rephrase",
+    ),
+    (
+        re.compile(
+            r"I'm sorry\s*—?\s*(?:the )?keypad entry didn't come through(?: on my end)?\.?\s*(?:Please say the number out loud,?\s*one digit at a time\.?)?",
+            re.IGNORECASE,
+        ),
+        "keypad_recovery",
+    ),
+    (
+        re.compile(
+            r"I didn't hear anything\.?\s*(?:Could you please repeat that\??)?",
+            re.IGNORECASE,
+        ),
+        "no_input_reprompt",
+    ),
+    (
+        re.compile(
+            r"(?:I'm sorry,?\s*)?(?:I didn't (?:quite )?catch that\.?\s*)?(?:Could you )?please rephrase (?:your request|that)\??",
+            re.IGNORECASE,
+        ),
+        "no_match_reprompt",
+    ),
+    (
+        re.compile(
+            r"I apologize,?\s+our system is currently having trouble processing that request\.?\s*(?:Let me connect you with a representative who can assist\.?)?",
+            re.IGNORECASE,
+        ),
+        "tool_error_apology",
+    ),
+)
+
 _LAST4_CONTEXT_RE = re.compile(  # pragma: no cover
     r"((?:ending\s+in|terminant\s+par|terminad?[oa]?\s+en|number\s+is|num[eé]ro\s+est|n[uú]mero\s+es)\s+)(\d{4})\b",
     re.IGNORECASE,
@@ -274,112 +312,6 @@ def strip_markdown(text: str) -> str:  # pragma: no cover
 def clean_speech(text: str) -> str:  # pragma: no cover
     """Clean markdown formatting and long numbers from spoken text."""
     return mask_long_numbers(strip_markdown(text))
-
-def clean_agent_speech(  # pragma: no cover
-    text: str,
-    session_params: Any = None,
-) -> str:
-    """Clean speech and preserve caller phone, card, bank, and account last-4 numbers."""
-    cleaned = clean_speech(text)
-    if not callable(getattr(session_params, "get", None)):
-        return cleaned
-    caller_last4 = str(session_params.get("caller_provided_phone_last4") or "").strip()
-    profile_last4 = str(session_params.get("phone_last4") or "").strip()
-    card_last4 = str(session_params.get("card_last4") or "").strip()
-    bank_last4 = str(session_params.get("bank_last4") or "").strip()
-    declined_last4 = str(session_params.get("declined_card_last4") or "").strip()
-    acc_digits = re.sub(r"\D", "", str(session_params.get("account_id") or ""))
-    account_last4 = acc_digits[-4:] if len(acc_digits) >= 4 else ""
-
-    valid_caller = len(caller_last4) == 4 and caller_last4.isdigit()
-    valid_profile = len(profile_last4) == 4 and profile_last4.isdigit()
-    valid_card = len(card_last4) == 4 and card_last4.isdigit()
-    valid_bank = len(bank_last4) == 4 and bank_last4.isdigit()
-    valid_declined = len(declined_last4) == 4 and declined_last4.isdigit()
-    effective_phone_last4 = (
-        caller_last4 if valid_caller else (profile_last4 if valid_profile else "")
-    )
-
-    if valid_caller:
-        if (
-            valid_profile
-            and profile_last4 != caller_last4
-            and profile_last4 != card_last4
-            and profile_last4 != bank_last4
-            and profile_last4 != declined_last4
-            and profile_last4 != account_last4
-            and profile_last4 in cleaned
-        ):
-            cleaned = re.sub(
-                rf"(?<![-$/.\d])\b{re.escape(profile_last4)}\b(?![-/\d]|\.\d)",
-                caller_last4,
-                cleaned,
-            )
-
-    if effective_phone_last4 or valid_card or valid_bank or valid_declined:
-
-        def _replace_non_card_last4(m: re.Match[str]) -> str:
-            raw_prefix = cleaned[max(0, m.start() - 35) : m.start()].lower()
-            prev_end = max(
-                (pm.end() for pm in _LAST4_CONTEXT_RE.finditer(raw_prefix)),
-                default=0,
-            )
-            prefix = raw_prefix[prev_end:]
-            cue = m.group(1).lower()
-            digits4 = m.group(2)
-
-            card_pos = _sp_term_pos(prefix, _SP_CARD_KWS)
-            bank_pos = _sp_term_pos(prefix, _SP_BANK_KWS)
-            if (
-                card_pos >= 0
-                and bank_pos >= 0
-                and _sp_term_pos(prefix, _SP_EXPLICIT_BANK_KWS) < 0
-            ):
-                bank_pos = -1
-            phone_pos = _sp_term_pos(prefix, _SP_PHONE_KWS)
-            is_number_is_cue = any(
-                c in cue
-                for c in (
-                    "number is",
-                    "numéro est",
-                    "numero est",
-                    "número es",
-                    "numero es",
-                )
-            )
-            explicit_phone_only = (
-                is_number_is_cue and card_pos < 0 and bank_pos < 0
-            ) or (phone_pos >= 0 and phone_pos > max(card_pos, bank_pos))
-
-            if not explicit_phone_only:
-                if card_pos >= 0 and valid_declined and digits4 == declined_last4:
-                    return m.group(0)
-                if (valid_card and digits4 == card_last4) or (
-                    valid_bank and digits4 == bank_last4
-                ):
-                    return m.group(0)
-                if card_pos < 0 and bank_pos < 0:
-                    if effective_phone_last4 and digits4 == effective_phone_last4:
-                        return m.group(0)
-                    if account_last4 and digits4 == account_last4:
-                        return m.group(0)
-
-            if phone_pos >= 0 and phone_pos > max(card_pos, bank_pos):
-                return (
-                    f"{m.group(1)}{effective_phone_last4}"
-                    if effective_phone_last4
-                    else m.group(0)
-                )
-            if card_pos >= 0 and card_pos > bank_pos:
-                return f"{m.group(1)}{card_last4}" if valid_card else m.group(0)
-            if bank_pos >= 0 and bank_pos > card_pos:
-                return f"{m.group(1)}{bank_last4}" if valid_bank else m.group(0)
-            if effective_phone_last4:
-                return f"{m.group(1)}{effective_phone_last4}"
-            return m.group(0)
-
-        cleaned = _LAST4_CONTEXT_RE.sub(_replace_non_card_last4, cleaned)
-    return cleaned
 
 def resolve_locale(language: str | None) -> str:  # pragma: no cover
     """Normalize a language tag, name, or code into a canonical BCP-47 locale."""
@@ -529,6 +461,31 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "fr-CA": "Je peux uniquement vous aider avec les services de télécommunications et les demandes de compte Telco. Merci de votre appel, au revoir.",
         "es-US": "Solo puedo ayudarle con servicios de telecomunicaciones y solicitudes de cuenta de Telco. Gracias por llamar, hasta luego.",
     },
+    "no_input_reprompt": {
+        "en-US": "I didn't hear anything. Could you please repeat that?",
+        "fr-CA": "Je n'ai rien entendu. Pourriez-vous répéter s'il vous plaît?",
+        "es-US": "No escuché nada. ¿Podría repetir por favor?",
+    },
+    "no_match_reprompt": {
+        "en-US": "I'm sorry, I didn't catch that. Could you please rephrase your request?",
+        "fr-CA": "Je m'excuse, je n'ai pas bien compris. Pourriez-vous reformuler votre demande s'il vous plaît?",
+        "es-US": "Lo siento, no entendí bien. ¿Podría reformular su solicitud por favor?",
+    },
+    "tool_error_apology": {
+        "en-US": "I apologize, our system is currently having trouble processing that request. Let me connect you with a representative who can assist.",
+        "fr-CA": "Je m'excuse, notre système a actuellement de la difficulté à traiter cette demande. Laissez-moi vous mettre en communication avec un représentant qui pourra vous aider.",
+        "es-US": "Le pido disculpas, nuestro sistema tiene problemas para procesar esa solicitud en este momento. Permítame comunicarle con un representante que pueda ayudarle.",
+    },
+    "keypad_recovery": {
+        "en-US": "I'm sorry — the keypad entry didn't come through on my end. Please say the number out loud, one digit at a time.",
+        "fr-CA": "Je m'excuse — la saisie au clavier n'a pas été captée de mon côté. Veuillez me dire le numéro à haute voix, un chiffre à la fois.",
+        "es-US": "Lo siento, la marcación en el teclado no se registró de mi lado. Por favor diga el número en voz alta, un dígito a la vez.",
+    },
+    "guardrail_rephrase": {
+        "en-US": "I apologize, could you please rephrase your request or share your account details so I can assist you?",
+        "fr-CA": "Je vous présente mes excuses, pourriez-vous reformuler votre demande ou partager les détails de votre compte afin que je puisse vous aider ?",
+        "es-US": "Le pido disculpas, ¿podría reformular su solicitud o compartir los detalles de su cuenta para que pueda ayudarle?",
+    },
 }
 
 def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots: object) -> str:  # pragma: no cover
@@ -554,6 +511,126 @@ def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots
             template = template.replace("[ref]", val_str).replace("{ref}", val_str)
             template = template.replace("[confirmation_number]", val_str).replace("{confirmation_number}", val_str)
     return template
+
+def clean_agent_speech(  # pragma: no cover
+    text: str,
+    session_params: Any = None,
+) -> str:
+    """Clean speech and preserve caller phone, card, bank, and account last-4 numbers."""
+    cleaned = clean_speech(text)
+    if not callable(getattr(session_params, "get", None)):
+        return cleaned
+    caller_last4 = str(session_params.get("caller_provided_phone_last4") or "").strip()
+    profile_last4 = str(session_params.get("phone_last4") or "").strip()
+    card_last4 = str(session_params.get("card_last4") or "").strip()
+    bank_last4 = str(session_params.get("bank_last4") or "").strip()
+    declined_last4 = str(session_params.get("declined_card_last4") or "").strip()
+    acc_digits = re.sub(r"\D", "", str(session_params.get("account_id") or ""))
+    account_last4 = acc_digits[-4:] if len(acc_digits) >= 4 else ""
+
+    valid_caller = len(caller_last4) == 4 and caller_last4.isdigit()
+    valid_profile = len(profile_last4) == 4 and profile_last4.isdigit()
+    valid_card = len(card_last4) == 4 and card_last4.isdigit()
+    valid_bank = len(bank_last4) == 4 and bank_last4.isdigit()
+    valid_declined = len(declined_last4) == 4 and declined_last4.isdigit()
+    effective_phone_last4 = (
+        caller_last4 if valid_caller else (profile_last4 if valid_profile else "")
+    )
+
+    if valid_caller:
+        if (
+            valid_profile
+            and profile_last4 != caller_last4
+            and profile_last4 != card_last4
+            and profile_last4 != bank_last4
+            and profile_last4 != declined_last4
+            and profile_last4 != account_last4
+            and profile_last4 in cleaned
+        ):
+            cleaned = re.sub(
+                rf"(?<![-$/.\d])\b{re.escape(profile_last4)}\b(?![-/\d]|\.\d)",
+                caller_last4,
+                cleaned,
+            )
+
+    if effective_phone_last4 or valid_card or valid_bank or valid_declined:
+
+        def _replace_non_card_last4(m: re.Match[str]) -> str:
+            raw_prefix = cleaned[max(0, m.start() - 35) : m.start()].lower()
+            prev_end = max(
+                (pm.end() for pm in _LAST4_CONTEXT_RE.finditer(raw_prefix)),
+                default=0,
+            )
+            prefix = raw_prefix[prev_end:]
+            cue = m.group(1).lower()
+            digits4 = m.group(2)
+
+            card_pos = _sp_term_pos(prefix, _SP_CARD_KWS)
+            bank_pos = _sp_term_pos(prefix, _SP_BANK_KWS)
+            if (
+                card_pos >= 0
+                and bank_pos >= 0
+                and _sp_term_pos(prefix, _SP_EXPLICIT_BANK_KWS) < 0
+            ):
+                bank_pos = -1
+            phone_pos = _sp_term_pos(prefix, _SP_PHONE_KWS)
+            is_number_is_cue = any(
+                c in cue
+                for c in (
+                    "number is",
+                    "numéro est",
+                    "numero est",
+                    "número es",
+                    "numero es",
+                )
+            )
+            explicit_phone_only = (
+                is_number_is_cue and card_pos < 0 and bank_pos < 0
+            ) or (phone_pos >= 0 and phone_pos > max(card_pos, bank_pos))
+
+            if not explicit_phone_only:
+                if card_pos >= 0 and valid_declined and digits4 == declined_last4:
+                    return m.group(0)
+                if (valid_card and digits4 == card_last4) or (
+                    valid_bank and digits4 == bank_last4
+                ):
+                    return m.group(0)
+                if card_pos < 0 and bank_pos < 0:
+                    if effective_phone_last4 and digits4 == effective_phone_last4:
+                        return m.group(0)
+                    if account_last4 and digits4 == account_last4:
+                        return m.group(0)
+
+            if phone_pos >= 0 and phone_pos > max(card_pos, bank_pos):
+                return (
+                    f"{m.group(1)}{effective_phone_last4}"
+                    if effective_phone_last4
+                    else m.group(0)
+                )
+            if card_pos >= 0 and card_pos > bank_pos:
+                return f"{m.group(1)}{card_last4}" if valid_card else m.group(0)
+            if bank_pos >= 0 and bank_pos > card_pos:
+                return f"{m.group(1)}{bank_last4}" if valid_bank else m.group(0)
+            if effective_phone_last4:
+                return f"{m.group(1)}{effective_phone_last4}"
+            return m.group(0)
+
+        cleaned = _LAST4_CONTEXT_RE.sub(_replace_non_card_last4, cleaned)
+
+    session_lang = ""
+    if callable(getattr(session_params, "get", None)):
+        session_lang = (
+            str(session_params.get("language") or "").strip()
+            or str(session_params.get("fx_language") or "").strip()
+            or str(session_params.get("preferred_language") or "").strip()
+        )
+    loc = resolve_copy_locale(session_lang)
+    if loc in ("fr-CA", "es-US"):
+        for pattern, key in _FALLBACK_LEAKAGE_REPLACEMENTS:
+            if pattern.search(cleaned):
+                replacement = spoken_line(key, loc)
+                cleaned = pattern.sub(replacement, cleaned)
+    return cleaned
 
 def enforce_closing_utterance(  # pragma: no cover
     reason: str = "resolved",
@@ -634,7 +711,11 @@ def enforce_handover_utterance(  # pragma: no cover
 
     reason = ""
     target_queue = ""
-    lang = params.get("language")
+    lang = (
+        params.get("language")
+        or params.get("fx_language")
+        or params.get("preferred_language")
+    )
     is_business = bool(params.get("business_flag"))
     for args in tool_args_list:
         if callable(getattr(args, "get", None)):
