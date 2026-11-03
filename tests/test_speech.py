@@ -484,3 +484,14 @@ def test_enforce_handover_fraud_empathy_precedes_hold_line() -> None:
         tool_args_list=({"reason": "fraud_escalation", "language": "en-US"},),
     )
     assert lead_in_out.index("facing challenges") < lead_in_out.index("Please hold")
+
+
+def test_enforce_closing_utterance_localizations() -> None:
+    from lib.speech import enforce_closing_utterance
+
+    assert "Thank you for contacting Telco" in enforce_closing_utterance("resolved", "en-US")
+    assert "Merci d'avoir choisi Telco" in enforce_closing_utterance("resolved", "fr-CA")
+    assert "¡Gracias por llamar a Telco!" in enforce_closing_utterance("resolved", "es-US")
+    assert "only able to assist with Telco" in enforce_closing_utterance("malicious_input", "en-US")
+    assert "unable to complete this call" in enforce_closing_utterance("blocked_caller", "en-US")
+

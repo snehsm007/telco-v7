@@ -89,6 +89,25 @@ def test_keeps_the_spoken_transfer_line_after_a_handover(callback) -> None:
 
 
 @pytest.mark.parametrize("callback", CALLBACKS)
+def test_injects_closing_message_when_end_session_has_no_spoken_text(callback) -> None:
+    for reason, lang, expected in (
+        ("resolved", "en-US", "Thank you for contacting Telco"),
+        ("resolved", "fr-CA", "Merci d'avoir choisi Telco"),
+        ("resolved", "es-US", "¡Gracias por llamar a Telco!"),
+        ("malicious_input", "en-US", "only able to assist with Telco"),
+        ("blocked_caller", "en-US", "unable to complete this call"),
+    ):
+        tool_only = SimpleNamespace(
+            content=SimpleNamespace(
+                parts=[SimpleNamespace(text=None, function_call=SimpleNamespace(name="end_session", args={"reason": reason}))]
+            )
+        )
+        res = callback.after_model_callback(SimpleNamespace(state={"language": lang}), tool_only)
+        assert res is tool_only
+        assert expected in tool_only.content.parts[0].text
+
+
+@pytest.mark.parametrize("callback", CALLBACKS)
 def test_returns_none_when_nothing_changes(callback) -> None:
     assert callback.after_model_callback(SimpleNamespace(state={}), SimpleNamespace(content=None)) is None
     assert callback.after_model_callback(SimpleNamespace(state={}), SimpleNamespace(content=SimpleNamespace(parts=None))) is None

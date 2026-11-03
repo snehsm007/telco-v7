@@ -401,3 +401,22 @@ def enforce_handover_utterance(
             merged = f"{merged} {' '.join(other_missing)}"
         return merged
     return f"{existing} {' '.join(missing)}"
+
+
+def enforce_closing_utterance(
+    reason: str = "resolved",
+    language: str | None = "en-US",
+) -> str:
+    """Return a warm, localized spoken closing line when ending a session."""
+    loc = resolve_copy_locale(language)
+    clean_reason = str(reason or "").strip().lower()
+    if clean_reason == "malicious_input":
+        return spoken_line("malicious_closing", loc)
+    if clean_reason == "blocked_caller":
+        return spoken_line("blocked_caller_deflection", loc)
+    if loc == "fr-CA":
+        return "Merci d'avoir choisi Telco. Bonne journée!"
+    if loc == "es-US":
+        return "¡Gracias por llamar a Telco! Que tenga un excelente día."
+    return "Thank you for contacting Telco. Have a wonderful day!"
+

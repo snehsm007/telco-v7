@@ -19,6 +19,7 @@ def after_model_callback(
     changed = False
     called_tools: list[str] = []
     tool_args_list: list[dict] = []
+    end_session_args: dict = {}
     spoken_indices: list[int] = []
 
     for part in parts:
@@ -28,11 +29,14 @@ def after_model_callback(
             if fc_name:
                 called_tools.append(fc_name)
             fc_args = getattr(fc, "args", None)
-            if fc_args is not None and fc_name in (
-                "handover_to_person",
-                "execute_live_agent_handover",
-            ):
-                tool_args_list.append(dict(fc_args))
+            if fc_args is not None:
+                if fc_name in (
+                    "handover_to_person",
+                    "execute_live_agent_handover",
+                ):
+                    tool_args_list.append(dict(fc_args))
+                elif fc_name == "end_session":
+                    end_session_args = dict(fc_args)
 
     for idx, part in enumerate(parts):
         text = getattr(part, "text", None)
@@ -100,6 +104,10 @@ def after_model_callback(
             called_tools=called_tools,
             tool_args_list=tool_args_list,
         ).strip()
+        if not msg and "end_session" in called_tools and not has_handover_tool:
+            reason = str(end_session_args.get("reason", "") or "").lower()
+            lang = state_dict.get("language") or end_session_args.get("language")
+            msg = enforce_closing_utterance(reason=reason, language=lang).strip()
         if msg and isinstance(parts, list):
             cleaned_msg = clean_agent_speech(msg, state_dict)
             if (
@@ -121,7 +129,7 @@ def after_model_callback(
 
 
 # --- BEGIN GENERATED SHARED BUNDLE (edit lib/, then run `make bundle`) ---
-# uses: from lib.speech import clean_agent_speech, enforce_handover_utterance
+# uses: from lib.speech import clean_agent_speech, enforce_closing_utterance, enforce_handover_utterance
 from pathlib import Path
 from typing import Any
 import re
@@ -373,43 +381,6 @@ def clean_agent_speech(  # pragma: no cover
         cleaned = _LAST4_CONTEXT_RE.sub(_replace_non_card_last4, cleaned)
     return cleaned
 
-_SP_BIZ_TERMS: frozenset[str] = frozenset(  # pragma: no cover
-    {"business", "entreprise", "affaires", "commercial", "comercial"}
-)
-
-_SP_FRAUD_TERMS: frozenset[str] = frozenset(  # pragma: no cover
-    {
-        "fraud",
-        "fraude",
-        "unauthorized",
-        "security",
-        "compromis",
-        "compromise",
-        "sim_swap",
-        "abuse",
-    }
-)
-
-_SP_HOLD_TAILS: tuple[str, ...] = (  # pragma: no cover
-    "please hold",
-    "veuillez patienter",
-    "por favor espere",
-)
-
-_SP_SPECIALIST_TERMS: frozenset[str] = frozenset(  # pragma: no cover
-    {
-        "refund",
-        "remboursement",
-        "reembolso",
-        "threshold",
-        "specialist",
-        "billing_specialist",
-    }
-)
-
-def _norm_ws(s: str) -> str:  # pragma: no cover
-    return " ".join(s.lower().split())
-
 def resolve_locale(language: str | None) -> str:  # pragma: no cover
     """Normalize a language tag, name, or code into a canonical BCP-47 locale."""
     raw = str(language or "").strip()
@@ -583,6 +554,60 @@ def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots
             template = template.replace("[ref]", val_str).replace("{ref}", val_str)
             template = template.replace("[confirmation_number]", val_str).replace("{confirmation_number}", val_str)
     return template
+
+def enforce_closing_utterance(  # pragma: no cover
+    reason: str = "resolved",
+    language: str | None = "en-US",
+) -> str:
+    """Return a warm, localized spoken closing line when ending a session."""
+    loc = resolve_copy_locale(language)
+    clean_reason = str(reason or "").strip().lower()
+    if clean_reason == "malicious_input":
+        return spoken_line("malicious_closing", loc)
+    if clean_reason == "blocked_caller":
+        return spoken_line("blocked_caller_deflection", loc)
+    if loc == "fr-CA":
+        return "Merci d'avoir choisi Telco. Bonne journée!"
+    if loc == "es-US":
+        return "¡Gracias por llamar a Telco! Que tenga un excelente día."
+    return "Thank you for contacting Telco. Have a wonderful day!"
+
+_SP_BIZ_TERMS: frozenset[str] = frozenset(  # pragma: no cover
+    {"business", "entreprise", "affaires", "commercial", "comercial"}
+)
+
+_SP_FRAUD_TERMS: frozenset[str] = frozenset(  # pragma: no cover
+    {
+        "fraud",
+        "fraude",
+        "unauthorized",
+        "security",
+        "compromis",
+        "compromise",
+        "sim_swap",
+        "abuse",
+    }
+)
+
+_SP_HOLD_TAILS: tuple[str, ...] = (  # pragma: no cover
+    "please hold",
+    "veuillez patienter",
+    "por favor espere",
+)
+
+_SP_SPECIALIST_TERMS: frozenset[str] = frozenset(  # pragma: no cover
+    {
+        "refund",
+        "remboursement",
+        "reembolso",
+        "threshold",
+        "specialist",
+        "billing_specialist",
+    }
+)
+
+def _norm_ws(s: str) -> str:  # pragma: no cover
+    return " ".join(s.lower().split())
 
 def enforce_handover_utterance(  # pragma: no cover
     text: str,

@@ -11,6 +11,7 @@
     "run_troubleshooting_and_sms",
     "get_appointment_and_ticket_status",
     "manage_appointment",
+    "manage_warranty_claim",
     "handover_to_person",
     "end_session"
   ],
