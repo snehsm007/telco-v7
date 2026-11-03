@@ -409,5 +409,35 @@ def test_lookup_account_french_billing_dispute_not_fraud(monkeypatch) -> None:
     assert reply["data"].get("must_escalate_immediately") is not True
 
 
+def test_lookup_account_agent_action_pin_first_no_unconditional_sms(monkeypatch) -> None:
+    """ADR-32: lookup_account agent_action mentions the PIN first and does not instruct an unconditional SMS."""
+    test_cases = [
+        ("en-US", "PIN", ("call send_login_code", "send a verification code")),
+        ("fr-CA", "NIP", ("appeler send_login_code", "envoyer un code de vérification")),
+        ("es-US", "PIN", ("llame a send_login_code", "enviar un código de verificación")),
+    ]
+    for lang, pin_term, forbidden_prefixes in test_cases:
+        session = SimpleNamespace(state={"auth_status": "none"})
+        monkeypatch.setattr(tool, "context", session, raising=False)
+        reply = tool.lookup_account("202 555 0143", language=lang)
+        assert reply["status"] == "ok"
+        action = reply["data"]["agent_action"]
+        # Must mention PIN / NIP before send_login_code
+        pin_idx = action.find(pin_term)
+        sms_idx = action.find("send_login_code")
+        assert pin_idx != -1, f"Expected {pin_term} in agent_action: {action}"
+        assert sms_idx != -1, f"Expected send_login_code in agent_action: {action}"
+        assert pin_idx < sms_idx, f"Expected {pin_term} before send_login_code in: {action}"
+        # Must NOT instruct an unconditional SMS
+        action_low = action.lower()
+        for forbidden in forbidden_prefixes:
+            assert not action_low.startswith(forbidden), f"Agent action should not start with '{forbidden}': {action}"
+        # Must qualify that SMS is only sent on request / failure
+        assert any(cond in action_low for cond in ("only if", "seulement", "solo si")), (
+            f"Expected conditional SMS instruction in: {action}"
+        )
+
+
+
 
 

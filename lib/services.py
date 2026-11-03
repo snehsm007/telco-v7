@@ -1292,9 +1292,9 @@ def lookup_account_impl(
         reply_data["email"] = email_val
     reply_data["agent_action"] = localized_text(
         lang,
-        "Call send_login_code(channel='sms') to send a verification code to the mobile on file, or offer authentication with the account PIN.",
-        "Appeler send_login_code(channel='sms') pour envoyer un code de vérification au mobile au dossier, ou proposer l'authentification avec le NIP du compte.",
-        "Llame a send_login_code(channel='sms') para enviar un código de verificación al móvil registrado, u ofrezca autenticación con el PIN de la cuenta.",
+        "Ask the caller to say their 4-digit account PIN out loud; call send_login_code(channel='sms') only if they ask for a code, don't have their PIN, or a PIN attempt failed.",
+        "Demander au client de dire son NIP de compte à 4 chiffres à haute voix; appeler send_login_code(channel='sms') seulement s'il demande un code, n'a pas son NIP ou en cas d'échec du NIP.",
+        "Pida al cliente que diga su PIN de cuenta de 4 dígitos en voz alta; llame a send_login_code(channel='sms') solo si pide un código, no tiene su PIN o si falla un intento de PIN.",
     )
     return _service_ok_reply(
         reply_data,

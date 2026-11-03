@@ -96,8 +96,14 @@ VERBATIM_SNIPPETS = {
         "Welcome to Telco. I can help with billing, technical support, or managing your account. "
         "To get started, could you tell me the phone number or account number associated with your service?"
     ),
-    "id_verification_otp": "For your security, I just sent a 6-digit code to that number — please read it back to me.",
-    "id_verification_pin": "For your security, I'll need to verify your identity. Please enter the 4-digit PIN you set up.",
+    "id_verification_otp": (
+        "I just sent a 6-digit code to your mobile on file — please read it back to me out loud. "
+        "You can also say your 4-digit account PIN instead."
+    ),
+    "id_verification_pin": (
+        "For your security, I'll need to verify your identity. "
+        "Please say your 4-digit account PIN out loud, or say 'text me a code' and I'll send a 6-digit code to your mobile on file."
+    ),
     "live_agent_handoff": "I'll connect you to a representative who can help. Please hold.",
     "business_handoff": (
         "To get you the best support for your business account, I'll transfer you to an agent. "

@@ -547,9 +547,9 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "es-US": "Esta llamada puede ser grabada con fines de calidad y capacitación.",
     },
     "id_verification_otp": {
-        "en-US": "For your security, I just sent a 6-digit code to that number — please read it back to me. Or you can say your 4-digit account PIN out loud.",
-        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code à 6 chiffres à ce numéro — veuillez me le lire. Vous pouvez aussi me dire votre NIP de compte à 4 chiffres à haute voix.",
-        "es-US": "Por su seguridad, acabo de enviar un código de 6 dígitos a ese número; por favor léamelo. También puede decirme en voz alta su PIN de cuenta de 4 dígitos.",
+        "en-US": "I just sent a 6-digit code to your mobile on file — please read it back to me out loud. You can also say your 4-digit account PIN instead.",
+        "fr-CA": "Je viens d'envoyer un code à 6 chiffres à votre cellulaire au dossier — veuillez me le lire à haute voix. Vous pouvez aussi me dire votre NIP de compte à 4 chiffres.",
+        "es-US": "Acabo de enviar un código de 6 dígitos a su móvil registrado — por favor léamelo en voz alta. También puede decirme su PIN de cuenta de 4 dígitos.",
     },
     "id_verification_email_otp": {
         "en-US": "For your security, I just sent a 6-digit verification code to your backup email address on file — please read it back to me.",
@@ -557,9 +557,9 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "es-US": "Por su seguridad, acabo de enviar un código de verificación de 6 dígitos a su correo electrónico de respaldo registrado; por favor léamelo.",
     },
     "id_verification_pin": {
-        "en-US": "For your security, I'll need to verify your identity. Please enter the 4-digit PIN you set up.",
-        "fr-CA": "Pour votre sécurité, je dois vérifier votre identité. Veuillez entrer le NIP à 4 chiffres que vous avez configuré.",
-        "es-US": "Por su seguridad, necesito verificar su identidad. Por favor ingrese el PIN de 4 dígitos que configuró.",
+        "en-US": "For your security, I'll need to verify your identity. Please say your 4-digit account PIN out loud, or say 'text me a code' and I'll send a 6-digit code to your mobile on file.",
+        "fr-CA": "Pour votre sécurité, je dois vérifier votre identité. Veuillez me dire votre NIP de compte à 4 chiffres à haute voix, ou dites « textez-moi un code » et j'enverrai un code à 6 chiffres à votre cellulaire au dossier.",
+        "es-US": "Por su seguridad, necesito verificar su identidad. Por favor dígame su PIN de cuenta de 4 dígitos en voz alta, o diga 'envíeme un código' y le enviaré un código de 6 dígitos a su móvil registrado.",
     },
     "live_agent_handoff": {
         "en-US": "I'll connect you to a representative who can help. Please hold.",
@@ -2364,9 +2364,9 @@ def lookup_account_impl(  # pragma: no cover
         reply_data["email"] = email_val
     reply_data["agent_action"] = localized_text(
         lang,
-        "Call send_login_code(channel='sms') to send a verification code to the mobile on file, or offer authentication with the account PIN.",
-        "Appeler send_login_code(channel='sms') pour envoyer un code de vérification au mobile au dossier, ou proposer l'authentification avec le NIP du compte.",
-        "Llame a send_login_code(channel='sms') para enviar un código de verificación al móvil registrado, u ofrezca autenticación con el PIN de la cuenta.",
+        "Ask the caller to say their 4-digit account PIN out loud; call send_login_code(channel='sms') only if they ask for a code, don't have their PIN, or a PIN attempt failed.",
+        "Demander au client de dire son NIP de compte à 4 chiffres à haute voix; appeler send_login_code(channel='sms') seulement s'il demande un code, n'a pas son NIP ou en cas d'échec du NIP.",
+        "Pida al cliente que diga su PIN de cuenta de 4 dígitos en voz alta; llame a send_login_code(channel='sms') solo si pide un código, no tiene su PIN o si falla un intento de PIN.",
     )
     return _service_ok_reply(
         reply_data,
