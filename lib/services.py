@@ -4199,12 +4199,22 @@ def initiate_number_transfer_impl(
                 "4. Confirme el código postal de facturación registrado.",
             ),
         ]
-        action_text = localized_text(
-            lang,
-            "Emit verbatim contract_cancellation_fee_disclosure from active language sheet, state early cancellation fee and prorated final bill estimate, and explain the required port checklist.",
-            "Émettez la divulgation textuelle contract_cancellation_fee_disclosure de la feuille de langue active, indiquez les frais d'annulation anticipée et l'estimation de facture finale au prorata, et expliquez la liste de contrôle de transfert requise.",
-            "Emita la divulgación textual contract_cancellation_fee_disclosure de la hoja de idioma activo, indique el cargo por cancelación anticipada y el estimado de factura final prorrateada, y explique la lista de verificación de transferencia requerida.",
-        )
+        already_disclosed = bool(state.get("cancellation_fee_disclosed"))
+        state["cancellation_fee_disclosed"] = True
+        if already_disclosed:
+            action_text = localized_text(
+                lang,
+                "Since contract_cancellation_fee_disclosure was already spoken earlier in this call, do not repeat it verbatim; state early cancellation fee and prorated final bill estimate and explain the required port checklist concisely.",
+                "Puisque contract_cancellation_fee_disclosure a déjà été prononcée plus tôt durant cet appel, ne la répétez pas mot à mot; indiquez les frais d'annulation anticipée, l'estimation au prorata et la liste de contrôle de transfert.",
+                "Dado que contract_cancellation_fee_disclosure ya se leyó antes en esta llamada, no la repita textualmente; indique el cargo por cancelación anticipada, el estimado prorrateado y la lista de verificación de transferencia.",
+            )
+        else:
+            action_text = localized_text(
+                lang,
+                "Emit verbatim contract_cancellation_fee_disclosure from active language sheet, state early cancellation fee and prorated final bill estimate, and explain the required port checklist.",
+                "Émettez la divulgation textuelle contract_cancellation_fee_disclosure de la feuille de langue active, indiquez les frais d'annulation anticipée et l'estimation de facture finale au prorata, et expliquez la liste de contrôle de transfert requise.",
+                "Emita la divulgación textual contract_cancellation_fee_disclosure de la hoja de idioma activo, indique el cargo por cancelación anticipada y el estimado de factura final prorrateada, y explique la lista de verificación de transferencia requerida.",
+            )
         return _service_ok_reply(
             {
                 "status": "ok",
@@ -4212,7 +4222,7 @@ def initiate_number_transfer_impl(
                 "required_port_checklist": chk,
                 "transfer_timeline": timeline,
                 "timeline": timeline,
-                "contract_disclosure_required": True,
+                "contract_disclosure_required": not already_disclosed,
                 "contract_disclosure": disc_line,
                 "verbatim_disclosure": disc_line,
                 "early_termination_fee": "0.00",
@@ -4243,12 +4253,22 @@ def initiate_number_transfer_impl(
         status_val = "ok"
         mode_val = "transfer_submitted"
 
-    auth_action_text = localized_text(
-        lang,
-        "Emit verbatim contract_cancellation_fee_disclosure from active language sheet, provide porting account number and confirm transfer PIN dispatched by SMS, and share final bill estimate.",
-        "Émettez la divulgation textuelle contract_cancellation_fee_disclosure de la feuille de langue active, fournissez le numéro de compte de transfert et confirmez l'envoi du NIP par SMS, et partagez l'estimation de facture finale.",
-        "Emita la divulgación textual contract_cancellation_fee_disclosure de la hoja de idioma activo, proporcione el número de cuenta de transferencia y confirme el PIN enviado por SMS, y comparta el estimado de factura final.",
-    )
+    already_disclosed_auth = bool(state.get("cancellation_fee_disclosed"))
+    state["cancellation_fee_disclosed"] = True
+    if already_disclosed_auth:
+        auth_action_text = localized_text(
+            lang,
+            "Since contract_cancellation_fee_disclosure was already spoken earlier in this call, do not repeat it verbatim; provide porting account number, confirm transfer PIN dispatched by SMS, and share final bill estimate concisely.",
+            "Puisque contract_cancellation_fee_disclosure a déjà été prononcée plus tôt durant cet appel, ne la répétez pas mot à mot; fournissez le numéro de compte de transfert, confirmez l'envoi du NIP par SMS et partagez l'estimation de facture finale.",
+            "Dado que contract_cancellation_fee_disclosure ya se leyó antes en esta llamada, no la repita textualmente; proporcione el número de cuenta de transferencia, confirme el PIN enviado por SMS y comparta el estimado de factura final.",
+        )
+    else:
+        auth_action_text = localized_text(
+            lang,
+            "Emit verbatim contract_cancellation_fee_disclosure from active language sheet, provide porting account number and confirm transfer PIN dispatched by SMS, and share final bill estimate.",
+            "Émettez la divulgation textuelle contract_cancellation_fee_disclosure de la feuille de langue active, fournissez le numéro de compte de transfert et confirmez l'envoi du NIP par SMS, et partagez l'estimation de facture finale.",
+            "Emita la divulgación textual contract_cancellation_fee_disclosure de la hoja de idioma activo, proporcione el número de cuenta de transferencia y confirme el PIN enviado por SMS, y comparta el estimado de factura final.",
+        )
 
     data: dict[str, Any] = {
         "status": status_val,

@@ -1473,26 +1473,33 @@ def login_code_accepted(  # pragma: no cover
     if (fx_pin and digits == fx_pin) or (fx_otp and digits == fx_otp):
         return True
 
+    # 4-digit codes are always PINs; 6-digit codes are always OTPs (regardless of channel)
+    if len(digits) == 4:
+        if fx_pin:
+            return digits == fx_pin
+        return True
+
+    if len(digits) == 6:
+        if fx_otp:
+            return digits == fx_otp
+        return True
+
     channel = ""
     if callable(getattr(eff_state, "get", None)):
         channel = str(eff_state.get("login_channel") or "").strip().lower()
 
-    # Determine whether the caller is using an OTP channel or PIN channel
-    is_otp_channel = channel in {"sms", "email", "mfa_sms", "mfa_email"} or len(digits) == 6
-    is_pin_channel = channel in {"pin", "dtmf", "keypad"} or len(digits) == 4
+    # Fallback for 5/7/8/9/10-digit codes by channel
+    is_otp_channel = channel in {"sms", "email", "mfa_sms", "mfa_email"}
+    is_pin_channel = channel in {"pin", "dtmf", "keypad"}
 
-    if is_otp_channel and not (channel in {"pin", "dtmf", "keypad"} and len(digits) == 4):
+    if is_otp_channel:
         if fx_otp:
             return digits == fx_otp
-        # When fx_otp is not set, 6-digit OTP (or OTP channel code) is accepted
-        # even if fx_pin is set, because fx_pin is not applicable to the OTP channel.
         return True
 
     if is_pin_channel:
         if fx_pin:
             return digits == fx_pin
-        # When fx_pin is not set, 4-digit PIN (or PIN channel code) is accepted
-        # even if fx_otp is set, because fx_otp is not applicable to the PIN channel.
         return True
 
     if fx_pin and len(digits) == len(fx_pin):
