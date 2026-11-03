@@ -3797,6 +3797,10 @@ def browse_plans_and_coverage_impl(
         shortlist.append(p_copy)
         if len(shortlist) >= 3:
             break
+    # A stated budget is a monthly ceiling the caller pays, so when any plan
+    # fits after tax, offer only those (a $55 plan is $63.25 with tax).
+    if max_b is not None and any(p.get("within_budget_after_tax") for p in shortlist):
+        shortlist = [p for p in shortlist if p.get("within_budget_after_tax")]
     if not shortlist:
         for p in catalog[:2]:
             p_copy = {k: v for k, v in p.items() if not k.endswith(("_en", "_fr", "_es"))}
@@ -3916,6 +3920,38 @@ def browse_plans_and_coverage_impl(
 # Tool 15: commit_plan_or_order
 # ============================================================================
 
+
+def _plan_name_key(text: Any) -> str:
+    """Lowercase, accent-free, alphanumeric-only form of a plan name for matching."""
+    import unicodedata
+
+    raw = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", raw.lower()).strip()
+
+
+def _resolve_plan_id(requested: Any) -> str:
+    """Map a spoken plan or add-on name (en/fr/es, e.g. "Fibre Internet 500", "sports pack") to its catalog id."""
+    key = _plan_name_key(requested)
+    if not key:
+        return ""
+    entries = [*(p for v in FAKE_PLAN_CATALOG.values() for p in v), *FAKE_ADDON_CATALOG]
+    # 1) exact name match in any language (Fiber/Fibre spelling folded)
+    fold = lambda s: s.replace("fibre", "fiber").replace("fibra", "fiber")
+    for p in entries:
+        names = [p.get("name", "")] + [v for k, v in p.items() if k.startswith("name_")]
+        if any(fold(_plan_name_key(n)) == fold(key) for n in names if n):
+            return str(p["id"])
+    # 2) a single entry whose name or id contains every word the caller used
+    words = [w for w in fold(key).split() if w not in {"the", "plan", "pack", "package", "forfait", "le", "la", "de"}]
+    if not words:
+        return ""
+    hits = [
+        p for p in entries
+        if all(w in fold(_plan_name_key(f"{p.get('name', '')} {p['id']}")) for w in words)
+    ]
+    return str(hits[0]["id"]) if len(hits) == 1 else ""
+
+
 def commit_plan_or_order_impl(
     plan_id: str | int | float = "",
     order_type: str = "plan_upgrade",
@@ -3973,6 +4009,14 @@ def commit_plan_or_order_impl(
             if str(addon["id"]).lower() == chosen_plan_id.lower():
                 plan_info = addon
                 break
+    if not plan_info:
+        resolved_id = _resolve_plan_id(chosen_plan_id)
+        if resolved_id:
+            chosen_plan_id = resolved_id
+            plan_info = next(
+                (p for p in [*(x for v in FAKE_PLAN_CATALOG.values() for x in v), *FAKE_ADDON_CATALOG] if p["id"] == resolved_id),
+                None,
+            )
 
     valid_plan_ids = [p["id"] for cat in FAKE_PLAN_CATALOG.values() for p in cat] + [a["id"] for a in FAKE_ADDON_CATALOG]
     if not plan_info:

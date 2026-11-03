@@ -147,3 +147,27 @@ def test_commit_plan_or_order_attaches_current_active_plans_quote_and_confirmed(
 
 
 
+
+
+@pytest.mark.parametrize(
+    ("spoken", "plan_id"),
+    [
+        ("Sports Ultimate Pack", "ADDON-SPORTS"),
+        ("sports", "ADDON-SPORTS"),
+        ("Fibre Internet 500", "NET-PLUS"),
+        ("5G Unlimited 60GB", "MOB-UNLTD"),
+    ],
+)
+def test_commit_accepts_spoken_plan_names(monkeypatch, spoken, plan_id) -> None:
+    session = SimpleNamespace(state={"auth_status": "pass", "account_id": "A1001"})
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    res = tool.commit_plan_or_order(plan_id=spoken, confirmed=True)
+    assert res["status"] == "ok"
+    assert res["data"]["plan_id"] == plan_id
+
+
+def test_commit_ambiguous_name_still_lists_valid_ids(monkeypatch) -> None:
+    monkeypatch.setattr(tool, "context", SimpleNamespace(state={"auth_status": "pass", "account_id": "A1001"}), raising=False)
+    res = tool.commit_plan_or_order(plan_id="internet", confirmed=True)
+    assert res["error"] == "UNKNOWN_PLAN_ID"
+    assert "NET-PLUS" in res["data"]["valid_plan_ids"]

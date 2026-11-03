@@ -1722,6 +1722,10 @@ def browse_plans_and_coverage_impl(  # pragma: no cover
         shortlist.append(p_copy)
         if len(shortlist) >= 3:
             break
+    # A stated budget is a monthly ceiling the caller pays, so when any plan
+    # fits after tax, offer only those (a $55 plan is $63.25 with tax).
+    if max_b is not None and any(p.get("within_budget_after_tax") for p in shortlist):
+        shortlist = [p for p in shortlist if p.get("within_budget_after_tax")]
     if not shortlist:
         for p in catalog[:2]:
             p_copy = {k: v for k, v in p.items() if not k.endswith(("_en", "_fr", "_es"))}

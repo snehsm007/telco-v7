@@ -192,7 +192,8 @@ def test_browse_plans_sets_browsed_category_budget_flags_and_post_auth_active_pl
     assert "current_active_plans" not in res_pre["data"]
     plans_pre = res_pre["data"]["shortlisted_plans"]
     assert any(p["within_budget_before_tax"] is True and p["within_budget_after_tax"] is True for p in plans_pre)
-    assert any(p["within_budget_before_tax"] is True and p["within_budget_after_tax"] is False for p in plans_pre)
+    # Plans that only fit before tax are dropped when one fits after tax
+    assert all(p["within_budget_after_tax"] is True for p in plans_pre)
 
     # Fallback shortlist when max_budget is below lowest plan also sets budget flags
     res_low = tool.browse_plans_and_coverage(category="mobility", max_budget=10, language="en-US")
@@ -216,3 +217,10 @@ def test_browse_plans_sets_browsed_category_budget_flags_and_post_auth_active_pl
 
 
 
+
+
+def test_budget_shortlist_keeps_only_plans_that_fit_after_tax(monkeypatch) -> None:
+    monkeypatch.setattr(tool, "context", SimpleNamespace(state={}), raising=False)
+    res = tool.browse_plans_and_coverage(category="mobility", max_budget="60", language="en-US")
+    plans = res["data"]["shortlisted_plans"]
+    assert plans and all(float(p["monthly_total_with_tax"]) <= 60 for p in plans)
