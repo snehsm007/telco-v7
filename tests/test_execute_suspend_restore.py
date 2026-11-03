@@ -206,3 +206,40 @@ def test_execute_restore_past_due_agent_action_localized(
     assert reply["error"] == "PAST_DUE_BALANCE_REQUIRED"
     assert reply["agent_action"].startswith(expected_action_prefix)
 
+
+
+def test_execute_restore_caller_reported_payment_boolean(monkeypatch) -> None:
+    session_true = SimpleNamespace(
+        state={
+            "auth_status": "pass",
+            "account_id": "A1001",
+            "is_suspended": True,
+            "past_due_balance": "85.50",
+            "payment_arrangement_active": False,
+        }
+    )
+    monkeypatch.setattr(tool, "context", session_true, raising=False)
+    reply_true = tool.execute_suspend_restore(
+        action="restore",
+        caller_reported_payment=True,
+    )
+    assert reply_true["status"] == "ok"
+    assert reply_true["data"]["service_restored"] is True
+    assert reply_true["data"]["caller_reported_payment_verified"] is True
+
+    session_false = SimpleNamespace(
+        state={
+            "auth_status": "pass",
+            "account_id": "A1001",
+            "is_suspended": True,
+            "past_due_balance": "85.50",
+            "payment_arrangement_active": False,
+        }
+    )
+    monkeypatch.setattr(tool, "context", session_false, raising=False)
+    reply_false = tool.execute_suspend_restore(
+        action="restore",
+        caller_reported_payment=False,
+    )
+    assert reply_false["status"] == "error"
+    assert reply_false["error"] == "PAST_DUE_BALANCE_REQUIRED"

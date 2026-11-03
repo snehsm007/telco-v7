@@ -8,7 +8,7 @@ def execute_suspend_restore(
     action: str = "suspend",
     reason: str = "vacation",
     target_date: str = "immediate",
-    caller_reported_payment: str | int | float = "",
+    caller_reported_payment: str | int | float | bool = "",
     identifier: str | int | float = "",
     verification_code: str | int | float = "",
     language: str = "",

@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
 import cxas_app.tools.send_login_code.python_function.python_code as tool
+from lib.services import send_login_code_impl
+
+tool.send_login_code_impl = send_login_code_impl
 
 
 def test_send_login_code_happy_path(monkeypatch) -> None:
@@ -113,6 +116,7 @@ def test_send_login_code_sms_no_mobile_on_file_returns_no_mobile_on_file(monkeyp
             "auth_failure_count": 0,
             "login_attempts": 0,
             "auth_status": "none",
+            "fx_mobile_on_file": "none",
         }
     )
     monkeypatch.setattr(tool, "context", session, raising=False)
@@ -127,6 +131,26 @@ def test_send_login_code_sms_no_mobile_on_file_returns_no_mobile_on_file(monkeyp
     assert session.state["login_attempts"] == 0
     assert session.state["auth_status"] == "none"
     assert not session.state.get("login_code_sent")
+
+
+def test_send_login_code_sms_fallback_mobile_on_file_when_identified(monkeypatch) -> None:
+    session = SimpleNamespace(
+        state={
+            "account_id": "ACC-1001",
+            "identified": True,
+            "phone_last4": "",
+            "caller_provided_phone_last4": "",
+            "auth_failure_count": 0,
+            "login_attempts": 0,
+            "auth_status": "none",
+        }
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.send_login_code(channel="sms")
+    assert reply["status"] == "ok"
+    assert reply["data"]["sent"] is True
+    assert reply["data"]["destination_last4"] == ""
+    assert session.state["auth_status"] == "code_sent"
 
 
 def test_send_login_code_sms_lookup_by_name_allows_otp_dispatch(monkeypatch) -> None:
