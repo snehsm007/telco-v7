@@ -56,6 +56,8 @@ import hashlib
 import re
 import sys
 
+DECLINED_CARD_LAST4: frozenset[str] = frozenset({"0000", "9999"})  # pragma: no cover
+
 FAKE_BILLING_LEDGER: dict[str, Any] = {  # pragma: no cover
     "account_id": "A1001",
     "billing_cycle_start": "2026-09-15",
@@ -336,6 +338,7 @@ ERROR_CODES: tuple[str, ...] = (  # pragma: no cover
     "LOCKED_OUT",
     "CARD_DECLINED",
     "PAYMENT_DECLINED",
+    "CARD_NOT_ON_FILE",
     "INELIGIBLE",
     "NOT_ELIGIBLE",
     "ALREADY_PROCESSED",
@@ -2744,10 +2747,13 @@ def process_bill_payment_impl(  # pragma: no cover
         and first_attempt
     )
 
+    card_declined = not is_bank and l4 in DECLINED_CARD_LAST4
+
     card_not_on_file = (
         not is_bank
         and has_named_card
         and (l4 not in stored_methods)
+        and (l4 not in DECLINED_CARD_LAST4)
         and not is_new_card
         and not has_card_token
         and not has_card_capture
@@ -2757,12 +2763,49 @@ def process_bill_payment_impl(  # pragma: no cover
 
     repeat_declined_card = bool(declined_last4 and (l4 == declined_last4))
 
+    if (
+        card_not_on_file
+        and not is_card_on_file_declined_fixture
+        and first_attempt
+        and state.get("card_not_on_file_prompted") != l4
+    ):
+        state["card_not_on_file_prompted"] = l4
+        not_on_file_msg = localized_text(
+            lang,
+            f"I don't have a saved card ending in {l4} on file. You have cards ending in {def_c4_b} and {sec_c4_b}, and a bank account ending in {def_b4_b} on file. Would you like to use one of those, or pay with the card ending in {l4} as a one-time payment?",
+            f"Je n'ai pas de carte se terminant par {l4} dans votre dossier. Vous avez les cartes se terminant par {def_c4_b} et {sec_c4_b}, ainsi qu'un compte bancaire se terminant par {def_b4_b} au dossier. Souhaitez-vous utiliser l'un de ces modes de paiement, ou payer avec la carte se terminant par {l4} comme paiement unique?",
+            f"No tengo una tarjeta guardada que termine en {l4} en su expediente. Tiene tarjetas que terminan en {def_c4_b} y {sec_c4_b}, y una cuenta bancaria que termina en {def_b4_b} registradas. ¿Desea utilizar uno de esos métodos o pagar con la tarjeta que termina en {l4} como un pago único?",
+        )
+        agent_act = localized_text(
+            lang,
+            f"Inform the caller that no saved card ending in {l4} is on file. Offer the payment methods on file returned by the tool, or offer to process the card ending in {l4} as a one-time card payment once confirmed.",
+            f"Informez le client qu'aucune carte se terminant par {l4} n'est enregistrée au dossier. Proposez les modes de paiement au dossier retournés par l'outil, ou proposez de traiter la carte se terminant par {l4} comme paiement unique une fois confirmée.",
+            f"Informe al cliente que no hay una tarjeta registrada que termine en {l4}. Ofrezca los métodos de pago registrados devueltos por la herramienta o procesar la tarjeta que termina en {l4} como pago único una vez confirmada.",
+        )
+        rep = error_reply(
+            "CARD_NOT_ON_FILE",
+            reference=reference,
+            language=lang,
+            message=not_on_file_msg,
+            data={
+                "requested_card_last4": l4,
+                "payment_methods_on_file": payment_methods_on_file,
+                "payment_failure_count": current_failures,
+                "spoken_message": not_on_file_msg,
+                "agent_action": agent_act,
+            },
+        )
+        rep["payment_methods_on_file"] = payment_methods_on_file
+        rep["spoken_message"] = not_on_file_msg
+        rep["agent_action"] = agent_act
+        return rep
+
     if not first_attempt and declined_last4 and (l4 != declined_last4 or is_bank):
         is_declined = False
     else:
         is_declined = (
             is_card_on_file_declined_fixture
-            or card_not_on_file
+            or card_declined
             or bank_declined
             or repeat_declined_card
         )
@@ -2824,6 +2867,8 @@ def process_bill_payment_impl(  # pragma: no cover
     if declined_last4 and (l4 != declined_last4 or is_bank):
         state["payment_failure_count"] = 0
         state["declined_card_last4"] = ""
+
+    state["card_not_on_file_prompted"] = ""
 
     past_due_raw = str(state.get("past_due_balance") or "0.00").strip()
     try:

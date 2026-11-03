@@ -172,6 +172,15 @@
       }
     },
     {
+      "name": "card_not_on_file_prompted",
+      "description": "Last 4 digits of unlisted card caller was prompted about for one-time payment confirmation.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
       "name": "preamble_spoken",
       "description": "True when PCI payment method preamble has been spoken in session.",
       "schema": {

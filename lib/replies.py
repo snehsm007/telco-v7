@@ -47,6 +47,7 @@ ERROR_CODES: tuple[str, ...] = (
     "LOCKED_OUT",
     "CARD_DECLINED",
     "PAYMENT_DECLINED",
+    "CARD_NOT_ON_FILE",
     "INELIGIBLE",
     "NOT_ELIGIBLE",
     "ALREADY_PROCESSED",
