@@ -974,6 +974,16 @@ FAKE_APPOINTMENTS_DATA: dict[str, Any] = {  # pragma: no cover
     ],
 }
 
+_WEEKDAYS = {  # pragma: no cover
+    "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+    "fr": ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"),
+    "es": ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"),
+}
+
+def _weekday_names(day: date) -> dict[str, str]:  # pragma: no cover
+    """Localized weekday names for a slot date, so the agent never computes the day itself."""
+    return {f"weekday_{k}": v[day.weekday()] for k, v in _WEEKDAYS.items()}
+
 def _dynamic_appointments_data() -> dict[str, Any]:  # pragma: no cover
     """Return a copy of FAKE_APPOINTMENTS_DATA with dates relative to today."""
     today = date.today()
@@ -981,12 +991,19 @@ def _dynamic_appointments_data() -> dict[str, Any]:  # pragma: no cover
     apt["scheduled_date"] = today.isoformat()
     tkt = dict(FAKE_APPOINTMENTS_DATA["repair_ticket"])
     tkt["reported_date"] = (today - timedelta(days=2)).isoformat()
-    slot_offsets = (2, 2, 3)
+    # Two weekday slots two days out, plus the next Saturday at least two days out
+    # so weekend requests have a real option.
+    to_saturday = (5 - today.weekday()) % 7
+    if to_saturday < 2:
+        to_saturday += 7
+    slot_offsets = (2, 2, to_saturday)
     slots: list[dict[str, Any]] = []
     for idx, raw_slot in enumerate(FAKE_APPOINTMENTS_DATA["available_reschedule_slots"]):
         s_copy = dict(raw_slot)
-        offset = slot_offsets[idx] if idx < len(slot_offsets) else 3
-        s_copy["date"] = (today + timedelta(days=offset)).isoformat()
+        offset = slot_offsets[idx] if idx < len(slot_offsets) else to_saturday
+        slot_day = today + timedelta(days=offset)
+        s_copy["date"] = slot_day.isoformat()
+        s_copy.update(_weekday_names(slot_day))
         slots.append(s_copy)
     return {
         "active_appointment": apt,
@@ -2689,6 +2706,7 @@ def manage_appointment_impl(  # pragma: no cover
             or sel_low in s_item.get("window_en", "").lower()
             or sel_low in s_item.get("window_fr", "").lower()
             or sel_low in s_item.get("window_es", "").lower()
+            or any(s_item.get(f"weekday_{k}", "").lower() in sel_low for k in ("en", "fr", "es") if s_item.get(f"weekday_{k}"))
         ):
             slot_match = s_item
             break
@@ -2697,6 +2715,7 @@ def manage_appointment_impl(  # pragma: no cover
             {
                 "slot_id": s["slot_id"],
                 "date": s["date"],
+                "weekday": s.get("weekday_fr" if lang == "fr-CA" else ("weekday_es" if lang == "es-US" else "weekday_en"), ""),
                 "window": s.get(
                     "window_fr" if lang == "fr-CA" else ("window_es" if lang == "es-US" else "window_en"),
                     s.get("window_en", ""),

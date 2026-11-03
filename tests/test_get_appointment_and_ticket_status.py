@@ -97,6 +97,6 @@ def test_get_appointment_and_ticket_status_dynamic_relative_dates(monkeypatch) -
     slots = data["available_slots"]
     assert slots[0]["date"] == (today + timedelta(days=2)).isoformat()
     assert slots[1]["date"] == (today + timedelta(days=2)).isoformat()
-    assert slots[2]["date"] == (today + timedelta(days=3)).isoformat()
+    assert date.fromisoformat(slots[2]["date"]).weekday() == 5 and slots[2]["weekday"] == "Saturday"
 
 

@@ -105,10 +105,21 @@ def test_manage_appointment_reschedule_dynamic_dates(monkeypatch) -> None:
     res_slot3 = tool.manage_appointment(action="reschedule", selected_slot="SLOT-3", language="en-US")
     assert res_slot3["status"] == "ok"
     assert res_slot3["data"]["slot_id"] == "SLOT-3"
-    assert res_slot3["data"]["scheduled_date"] == (today + timedelta(days=3)).isoformat()
+    assert date.fromisoformat(res_slot3["data"]["scheduled_date"]).weekday() == 5  # next Saturday
 
     res_fallback = tool.manage_appointment(action="reschedule", selected_slot="", language="en-US")
     assert res_fallback["status"] == "error"
     assert res_fallback["data"]["appointment_rescheduled"] is False
     assert "available_slots" in res_fallback["data"]
 
+
+
+def test_reschedule_to_saturday_by_weekday_name(monkeypatch) -> None:
+    from datetime import date
+
+    session = SimpleNamespace(state={"auth_status": "pass", "account_id": "A1001"})
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    for spoken, lang in (("Saturday morning", "en-US"), ("samedi", "fr-CA")):
+        res = tool.manage_appointment(action="reschedule", selected_slot=spoken, language=lang)
+        assert res["status"] == "ok", res
+        assert date.fromisoformat(res["data"]["scheduled_date"]).weekday() == 5
