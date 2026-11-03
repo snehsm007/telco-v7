@@ -129,6 +129,7 @@ Friendly, concise, and efficient. Identify the caller's account and route them t
             <action>
                 In the same turn, speak verbatim live_agent_handoff from <active_language_sheet> (matching handoff_message), call {@TOOL: handover_to_person} with:
                 - reason: user_requested_agent
+                - target_queue: customer_service
                 - language: the active language code
                 and call {@TOOL: end_session} with:
                 - reason: user_requested_agent

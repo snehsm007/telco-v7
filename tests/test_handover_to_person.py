@@ -9,6 +9,7 @@ def test_handover_to_person_happy_path(monkeypatch) -> None:
     reply = tool.handover_to_person(reason="caller_requested")
     assert reply["status"] == "ok"
     assert reply["data"]["handoff_status"] == "completed_via_specialist_queue"
+    assert reply["data"]["target_queue"] == "customer_service"
     assert session.state["handover_complete"] is True
     assert "representative" in session.state["handoff_message"].lower()
 
