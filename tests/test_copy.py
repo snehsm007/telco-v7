@@ -178,3 +178,48 @@ def test_localized_error_defaults() -> None:
             err_msg, agent_action = LOCALIZED_ERROR_DEFAULTS[loc][code]
             assert isinstance(err_msg, str) and len(err_msg) > 0
             assert isinstance(agent_action, str) and len(agent_action) > 0
+
+
+def test_no_verification_prompt_contains_keypad_or_enter_for_pin() -> None:
+    """ADR-32: no instruction.txt/global_instruction.txt verification prompt contains
+
+    'enter'/'keypad'/'entrer'/'ingrese' for PIN entry.
+    """
+    import pathlib
+    import re
+
+    # 1. Check id_verification_pin in SPOKEN_LINES
+    pin_prompts = SPOKEN_LINES.get("id_verification_pin", {})
+    assert pin_prompts, "id_verification_pin prompt missing in SPOKEN_LINES"
+    forbidden_terms = {"enter", "keypad", "entrer", "ingrese"}
+    for loc, text in pin_prompts.items():
+        text_low = text.lower()
+        for term in forbidden_terms:
+            assert term not in text_low, (
+                f"id_verification_pin for {loc} contains forbidden term '{term}': {text}"
+            )
+        assert "say" in text_low or "dire" in text_low or "diga" in text_low, (
+            f"id_verification_pin for {loc} must ask to say PIN out loud: {text}"
+        )
+
+    # 2. Check global_instruction.txt and agent instruction.txt verification sections
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    instruction_files = [repo_root / "cxas_app" / "global_instruction.txt"]
+    instruction_files.extend((repo_root / "cxas_app" / "agents").glob("*/instruction.txt"))
+
+    pin_entry_forbidden_patterns = [
+        re.compile(r"\benter\b[^\.\n]*\bpin\b", re.IGNORECASE),
+        re.compile(r"\bkeypad\b[^\.\n]*\b(?:for|to\s+enter)\s+pin\b", re.IGNORECASE),
+        re.compile(r"\bentrer\b[^\.\n]*\bnip\b", re.IGNORECASE),
+        re.compile(r"\bingrese\b[^\.\n]*\bpin\b", re.IGNORECASE),
+    ]
+
+    for p in instruction_files:
+        assert p.exists(), f"Instruction file {p} does not exist"
+        content = p.read_text(encoding="utf-8")
+        for pat in pin_entry_forbidden_patterns:
+            match = pat.search(content)
+            assert not match, (
+                f"Instruction {p.name} contains forbidden PIN entry phrasing: {match.group(0)!r}"
+            )
+

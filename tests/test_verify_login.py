@@ -273,3 +273,25 @@ def test_verify_login_pin_1111_fails_when_fx_pin_on_file_mismatches(monkeypatch)
     assert reply["error"] == "WRONG_CODE"
     assert session.state["auth_failure_count"] == 1.0
 
+
+def test_verify_login_pin_success_without_prior_send_login_code(monkeypatch) -> None:
+    """ADR-32: verify_login accepts a 4-digit PIN with method='auto' with no prior send_login_code."""
+    session = SimpleNamespace(
+        state={
+            "account_id": "A1001",
+            "auth_status": "identified",
+            "login_code_sent": False,
+            "auth_failure_count": 0.0,
+        }
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.verify_login(code="1234", method="auto")
+    assert reply["status"] == "ok"
+    assert reply["data"]["verified"] is True
+    assert reply["data"]["logged_in"] is True
+    assert reply["data"]["auth_status"] == "pass"
+    assert session.state["auth_status"] == "pass"
+    assert session.state["logged_in"] is True
+    assert session.state["login_channel"] == "pin"
+
+
