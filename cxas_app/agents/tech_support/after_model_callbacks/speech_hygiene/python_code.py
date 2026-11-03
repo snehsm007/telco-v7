@@ -490,7 +490,7 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
     },
     "id_verification_pin": {
         "en-US": "For your security, I'll need to verify your identity. Please enter the 4-digit PIN you set up.",
-        "fr-CA": "Pour votre sécurité, je dois vérifier votre identité. Veuillez composer le NIP à 4 chiffres que vous avez configuré.",
+        "fr-CA": "Pour votre sécurité, je dois vérifier votre identité. Veuillez entrer le NIP à 4 chiffres que vous avez configuré.",
         "es-US": "Por su seguridad, necesito verificar su identidad. Por favor ingrese el PIN de 4 dígitos que configuró.",
     },
     "live_agent_handoff": {
