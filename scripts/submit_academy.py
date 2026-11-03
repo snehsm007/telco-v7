@@ -476,6 +476,12 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
       help="Path to environments/staging.mk for app/agent resolution.",
   )
   parser.add_argument(
+      "--last-push",
+      type=Path,
+      default=REPO_ROOT / "history" / "last_push.json",
+      help="Path to history/last_push.json for pushed app resolution.",
+  )
+  parser.add_argument(
       "--cloud-log",
       type=Path,
       default=REPO_ROOT / "docs" / "cloud-log.md",
@@ -575,7 +581,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     agent_app_id = resolve_agent_app_id(
         explicit_app=args.app,
         staging_mk_path=args.staging_mk,
-        last_push_path=REPO_ROOT / "history" / "last_push.json",
+        last_push_path=args.last_push,
         is_dry_run=args.dry_run,
     )
   except ValueError as exc:

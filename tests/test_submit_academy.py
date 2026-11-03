@@ -379,6 +379,7 @@ def test_main_dry_run_success(tmp_path: Path, capsys):
       "--dry-run",
       "--cloud-log", str(log_file),
       "--staging-mk", str(staging_mk),
+      "--last-push", str(tmp_path / "nonexistent.json"),
       "--bench-history-dir", str(bench_dir),
   ])
   assert ret == 0
