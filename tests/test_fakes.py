@@ -17,6 +17,8 @@ from lib.fakes import (
     SPOKEN_LINES,
     VALID_LOGIN_CODES,
     find_account,
+    fixture_state_scope,
+    is_placeholder_code,
     is_synthetic_wrong_identifier,
     login_code_accepted,
     normalize_code,
@@ -92,10 +94,85 @@ def test_synthetic_wrong_identifiers() -> None:
     assert find_account("1234567890") is None
     assert find_account("5550000000") is None
     assert find_account("2020000123") is None
-    assert find_account("2025559999") is None
-    assert find_account("2025551111") is None
+    assert find_account("2025550000") is None
     assert find_account("+33 6 00 00 00 00") is None
     assert find_account("+33 6 12 34 wrong") is None
+
+
+def test_seven_digit_local_phone_number_lookup() -> None:
+    rec = find_account("555-0199")
+    assert rec is not None
+    assert rec["identifier_kind"] == "phone"
+    assert rec["phone"] == "5550199"
+    assert rec["phone_last4"] == "0199"
+    assert rec["caller_provided_phone_last4"] == "0199"
+    assert rec["linked_mobile_last4"] == "0199"
+    assert rec["account_id"] == "ACC-0199"
+
+
+def test_synthetic_account_and_billing_relookup() -> None:
+    # Synthetic ACC-XXXX re-lookup on Turn 2+
+    acc = find_account("ACC-0199")
+    assert acc is not None
+    assert acc["account_id"] == "ACC-0199"
+    assert acc["identifier_kind"] == "account_id"
+    assert acc["phone_last4"] == ""
+    assert acc["caller_provided_phone_last4"] == ""
+    assert acc["linked_mobile_last4"] == ""
+
+    # Synthetic BA-XXXXXX re-lookup on Turn 2+
+    ba = find_account("BA-555019")
+    assert ba is not None
+    assert ba["account_id"] == "BA-555019"
+    assert ba["identifier_kind"] == "account_id"
+    assert ba["phone_last4"] == ""
+    assert ba["caller_provided_phone_last4"] == ""
+    assert ba["linked_mobile_last4"] == ""
+
+    # Billing account numbers (8/9/12 digits) keep phone_last4 empty
+    ban9 = find_account("928374651")
+    assert ban9 is not None
+    assert ban9["identifier_kind"] == "billing_account"
+    assert ban9["phone_last4"] == ""
+    assert ban9["caller_provided_phone_last4"] == ""
+    assert ban9["linked_mobile_last4"] == ""
+
+    ban12 = find_account("882944105572")
+    assert ban12 is not None
+    assert ban12["identifier_kind"] == "billing_account"
+    assert ban12["phone_last4"] == ""
+    assert ban12["caller_provided_phone_last4"] == ""
+    assert ban12["linked_mobile_last4"] == ""
+
+
+def test_placeholder_code_and_zero_hardcoded_wrong_pin() -> None:
+    # Placeholder codes: None, bool, empty, <4 digits, or all zeros
+    assert is_placeholder_code(None) is True
+    assert is_placeholder_code(True) is True
+    assert is_placeholder_code("") is True
+    assert is_placeholder_code("   ") is True
+    assert is_placeholder_code("12") is True
+    assert is_placeholder_code("123") is True
+    assert is_placeholder_code("0000") is True
+    assert is_placeholder_code("000000") is True
+    # Non-zero repeated digits are valid codes, not placeholders
+    assert is_placeholder_code("1111") is False
+    assert is_placeholder_code("2222") is False
+    assert is_placeholder_code("9999") is False
+
+    # When no fx_pin_on_file override is set, 1111 and 9999 succeed on attempt 0
+    assert login_code_accepted("1111", attempts=0) is True
+    assert login_code_accepted("9999", attempts=0) is True
+    assert secret_pin_accepted("1111", attempts=0) is True
+    assert secret_pin_accepted("9999", attempts=0) is True
+
+    # When fx_pin_on_file is set, non-matching PINs fail
+    state = {"fx_pin_on_file": "8374"}
+    assert login_code_accepted("1111", attempts=0, state=state) is False
+    assert login_code_accepted("9999", attempts=0, state=state) is False
+    assert login_code_accepted("8374", attempts=0, state=state) is True
+    assert secret_pin_accepted("1111", attempts=0, state=state) is False
+    assert secret_pin_accepted("8374", attempts=0, state=state) is True
 
 
 def test_international_phone_numbers_resolve() -> None:

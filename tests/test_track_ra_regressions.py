@@ -149,7 +149,7 @@ def test_warranty_swollen_battery_safety_override() -> None:
 
 def test_password_reset_unknown_phone_propagates_not_found() -> None:
     st: dict = {}
-    res = send_password_reset_sms_impl(identifier="514-555-9999", state=st)
+    res = send_password_reset_sms_impl(identifier="514-555-0000", state=st)
     assert res["status"] == "error"
     assert res["error"] == "NOT_FOUND"
 

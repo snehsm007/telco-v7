@@ -203,6 +203,8 @@ Every entry below corresponds to an evaluation whose scenario or user-guide expl
 | `sim__dispute_charge_auth_retry` | `fx_pin_on_file` | `4321` | L189 | I want to dispute a charge on my bill, but I might make a mistake entering my PIN the first time |
 | `sim__dispute_charge_business_account_deflection` | `fx_business_flag` | `true` | L175 | I want to dispute a billing charge on my business account |
 | `sim__dispute_charge_business_account_deflection` | `fx_pin_on_file` | `4829` | L180 | * **Judge criteria**: The user is immediately redirected to a live business representative without being forced to go... |
+| `sim__manage_mfa_auth_failure` | `fx_otp_on_file` | `837492` | L525 | I want to change my MFA settings but I fail the security verification (3 incorrect codes) |
+| `sim__manage_mfa_auth_failure` | `fx_pin_on_file` | `8374` | L525 | I want to change my MFA settings but I fail the security verification (3 incorrect codes) |
 | `sim__manage_mfa_disable` | `fx_mfa_enabled` | `true` | L533 | I want to disable two-factor authentication on my account because I lost my old authenticator phone |
 | `sim__manage_mfa_enable` | `fx_mfa_enabled` | `false` | L548 | I want to enable multi-factor authentication on my account to make it more secure |
 | `sim__manage_mfa_french_disable` | `fx_mfa_enabled` | `true` | L567 | * **User guide**: Speak only in French Canadian. Ask to disable MFA. Authenticate with your PIN and confirm the change |

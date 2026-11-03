@@ -31,9 +31,7 @@ ACCOUNTS: tuple[dict[str, str], ...] = (
     },
 )
 
-ALWAYS_WRONG_LOGIN_CODES: frozenset[str] = frozenset(
-    {"0000", "000000", "1111", "111111", "9999", "999999"}
-)
+ALWAYS_WRONG_LOGIN_CODES: frozenset[str] = frozenset({"0000", "000000"})
 VALID_OTPS: frozenset[str] = frozenset({"123456", "246810", "384920", "482913"})
 VALID_PINS: frozenset[str] = frozenset({"1234", "5678"})
 VALID_LOGIN_CODES: frozenset[str] = VALID_OTPS | VALID_PINS
@@ -62,7 +60,7 @@ def normalize_code(value: Any) -> str:
 
 
 def is_placeholder_code(val: Any) -> bool:
-    """Return True for placeholder or no-input codes ("", 0000, 000000, all-same-digit, < 4 digits)."""
+    """Return True for placeholder or no-input codes ("", 0000, 000000, < 4 digits)."""
     if val is None or isinstance(val, bool):
         return True
     s = str(val).strip()
@@ -71,10 +69,7 @@ def is_placeholder_code(val: Any) -> bool:
     digits = normalize_code(s)
     if len(digits) < 4:
         return True
-    # Real wrong codes from ALWAYS_WRONG_LOGIN_CODES (e.g. 9999, 999999) must strike as wrong codes
-    if digits in {"9999", "999999"}:
-        return False
-    if len(set(digits)) == 1:
+    if set(digits) == {"0"}:
         return True
     return False
 
@@ -105,7 +100,7 @@ def is_synthetic_wrong_identifier(raw_str: str, digits: str) -> bool:
     clean_raw = raw_str.strip().upper()
     is_alphanumeric_id = bool(re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", clean_raw))
     if is_alphanumeric_id:
-        if digits[-4:] in {"0000", "9999", "1111"}:
+        if digits[-4:] in {"0000"}:
             return True
         return False
     is_intl = (raw_str.strip().startswith("+") or raw_str.strip().startswith("00")) and 10 <= len(digits) <= 15
@@ -113,15 +108,15 @@ def is_synthetic_wrong_identifier(raw_str: str, digits: str) -> bool:
         return True
     norm_digits = digits[1:] if (len(digits) == 11 and digits.startswith("1")) else digits
     if len(norm_digits) == 10:
-        if norm_digits[-4:] in {"0000", "9999", "1111"}:
+        if norm_digits[-4:] in {"0000"}:
             return True
         if norm_digits[:3] == "000" or norm_digits[3:7] == "0000" or norm_digits == "1234567890":
             return True
     if len(digits) in (11, 12) or len(norm_digits) in (11, 12):
-        if digits[-4:] in {"0000", "9999", "1111"}:
+        if digits[-4:] in {"0000"}:
             return True
     if is_intl:
-        if digits[-4:] in {"0000", "9999", "1111"}:
+        if digits[-4:] in {"0000"}:
             return True
     return False
 
@@ -218,7 +213,7 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
         }
 
     if not has_alpha and len(norm_digits) in (7, 8, 9, 10, 11, 12):
-        if len(norm_digits) == 10:
+        if len(norm_digits) in (7, 10):
             return {
                 "account_id": f"ACC-{norm_digits[-4:]}",
                 "phone": norm_digits,
@@ -262,13 +257,13 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
             "duplicate_payment_amount": "85.50",
         }
 
-    if has_alpha and not raw.startswith("ACC-") and re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", raw):
+    if has_alpha and re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", raw):
         base = dict(ACCOUNTS[0])
         base["account_id"] = raw
-        base["linked_mobile_last4"] = base["phone"][-4:]
-        base[_k_p4] = base["phone"][-4:]
+        base["linked_mobile_last4"] = ""
+        base[_k_p4] = ""
         base[_k_cp4] = ""
-        base["billing_account"] = "BA-" + base["phone"][-6:]
+        base["billing_account"] = raw if raw.startswith("BA-") else ("BA-" + base["phone"][-6:])
         base[_k_a4] = raw[-4:]
         base["identifier_kind"] = "account_id"
         base["first_name"] = synth_fn if synth_fn else base.get("first_name", "")
@@ -293,8 +288,8 @@ _ACTIVE_FIXTURE_STATE: contextvars.ContextVar[dict[str, Any] | None] = (
 class fixture_state_scope:
     """Context manager setting _ACTIVE_FIXTURE_STATE for the duration of the block."""
 
-    def __init__(self, state: dict[str, Any] | None) -> None:
-        self.state = state if isinstance(state, dict) else None
+    def __init__(self, state: Any) -> None:
+        self.state = state if callable(getattr(state, "get", None)) else None
         self.token = None
 
     def __enter__(self) -> "fixture_state_scope":
@@ -307,25 +302,24 @@ class fixture_state_scope:
 
 
 def get_fixture_fact(
-    state: dict[str, Any] | None,
-    fact_name: str,
+    state: Any = None,
+    fact_name: str = "",
     default: Any = None,
 ) -> Any:
     """Retrieve a backend fixture fact from session state (checking fx_* and canonical variables),
 
     falling back to realistic defaults. Treats None and "" as unset.
     """
-    eff = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
-    if not isinstance(eff, dict) or not fact_name:
+    eff = state if callable(getattr(state, "get", None)) else _ACTIVE_FIXTURE_STATE.get()
+    if not callable(getattr(eff, "get", None)) or not fact_name:
         return default
 
     base = fact_name[3:] if fact_name.startswith("fx_") else fact_name
     candidates = (f"fx_{base}", fact_name, base)
     for k in candidates:
-        if k in eff:
-            val = eff.get(k)
-            if val is not None and val != "":
-                return val
+        val = eff.get(k)
+        if val is not None and val != "":
+            return val
     return default
 
 
@@ -333,7 +327,7 @@ def login_code_accepted(
     code_digits: Any,
     attempts: int = 0,
     max_attempts: int = 3,
-    state: dict[str, Any] | None = None,
+    state: Any = None,
 ) -> bool:
     """Whether the fake login service accepts a code on this try (the login ladder)."""
     digits = normalize_code(code_digits)
@@ -344,7 +338,11 @@ def login_code_accepted(
     if attempts >= max(max_attempts - 1, 1):
         return False
 
-    eff_state = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    eff_state = state if callable(getattr(state, "get", None)) else _ACTIVE_FIXTURE_STATE.get()
+
+    mock_err = str(get_fixture_fact(eff_state, "mock_error") or "").strip().upper()
+    if mock_err == "WRONG_CODE":
+        return False
 
     fx_pin_raw = get_fixture_fact(eff_state, "fx_pin_on_file")
     fx_otp_raw = get_fixture_fact(eff_state, "fx_otp_on_file")
@@ -356,7 +354,7 @@ def login_code_accepted(
         return True
 
     channel = ""
-    if isinstance(eff_state, dict):
+    if callable(getattr(eff_state, "get", None)):
         channel = str(eff_state.get("login_channel") or "").strip().lower()
 
     # Determine whether the caller is using an OTP channel or PIN channel
@@ -401,6 +399,10 @@ def secret_pin_accepted(
         return False
 
     eff_state = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    mock_err = str(get_fixture_fact(eff_state, "mock_error") or "").strip().upper()
+    if mock_err == "WRONG_CODE":
+        return False
+
     fx_pin_raw = get_fixture_fact(eff_state, "fx_pin_on_file")
     fx_pin = normalize_code(fx_pin_raw) if fx_pin_raw else ""
     if fx_pin:

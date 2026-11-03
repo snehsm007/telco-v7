@@ -1,7 +1,11 @@
 from types import SimpleNamespace
 
 import cxas_app.tools.lookup_account.python_function.python_code as tool
+from lib.fakes import find_account, is_synthetic_wrong_identifier
 from lib.services import lookup_account_impl
+
+tool.find_account = find_account
+tool.is_synthetic_wrong_identifier = is_synthetic_wrong_identifier
 
 
 def test_lookup_account_happy_path_simplenamespace(monkeypatch) -> None:
@@ -41,7 +45,7 @@ def test_lookup_account_invalid_empty_input(monkeypatch) -> None:
 def test_lookup_account_not_found(monkeypatch) -> None:
     session = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session, raising=False)
-    reply = tool.lookup_account("9999999999")
+    reply = tool.lookup_account("2025550000")
     assert reply["status"] == "error"
     assert reply["error"] == "NOT_FOUND"
 
@@ -199,7 +203,7 @@ def test_lookup_account_digits_only_behaves_as_before(monkeypatch) -> None:
 
     session_err = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session_err, raising=False)
-    reply_err = tool.lookup_account("9999999999")
+    reply_err = tool.lookup_account("2025550000")
     assert reply_err["status"] == "error"
     assert reply_err["error"] == "NOT_FOUND"
 
@@ -295,18 +299,50 @@ def test_lookup_account_12_digit_billing_account(monkeypatch) -> None:
     assert reply["data"]["account_id"] == "ACC-5572"
     assert session.state["account_id"] == "ACC-5572"
 
-    # Synthetic wrong 12-digit numbers ending in 0000, 9999, 1111 remain rejected
+    # Synthetic wrong 12-digit numbers ending in 0000 remain rejected
     session_wrong = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session_wrong, raising=False)
     reply_wrong = tool.lookup_account("8829-4410-0000")
     assert reply_wrong["status"] == "error"
     assert reply_wrong["error"] == "NOT_FOUND"
 
+    # 12-digit number ending in 9999 is valid since 9999 is not globally blocklisted
     session_9999 = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session_9999, raising=False)
     reply_9999 = tool.lookup_account("8829-4410-9999")
-    assert reply_9999["status"] == "error"
-    assert reply_9999["error"] == "NOT_FOUND"
+    assert reply_9999["status"] == "ok"
+    assert reply_9999["data"]["account_id"] == "ACC-9999"
+
+
+def test_lookup_account_seven_digit_local_phone(monkeypatch) -> None:
+    session = SimpleNamespace(state={})
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.lookup_account("555-0199")
+    assert reply["status"] == "ok"
+    assert reply["data"]["account_id"] == "ACC-0199"
+    assert reply["data"]["phone_last4"] == "0199"
+    assert reply["data"]["caller_provided_phone_last4"] == "0199"
+    assert reply["data"]["linked_mobile_last4"] == "0199"
+    assert session.state["account_id"] == "ACC-0199"
+    assert session.state["phone_last4"] == "0199"
+    assert session.state["caller_provided_phone_last4"] == "0199"
+
+
+def test_lookup_account_synthetic_relookup_turn_two(monkeypatch) -> None:
+    session = SimpleNamespace(state={})
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.lookup_account("ACC-0199")
+    assert reply["status"] == "ok"
+    assert reply["data"]["account_id"] == "ACC-0199"
+    assert reply["data"]["phone_last4"] == ""
+    assert session.state["account_id"] == "ACC-0199"
+
+    session_ba = SimpleNamespace(state={})
+    monkeypatch.setattr(tool, "context", session_ba, raising=False)
+    reply_ba = tool.lookup_account("BA-555019")
+    assert reply_ba["status"] == "ok"
+    assert reply_ba["data"]["account_id"] == "BA-555019"
+    assert session_ba.state["account_id"] == "BA-555019"
 
 
 

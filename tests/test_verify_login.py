@@ -1,6 +1,22 @@
 from types import SimpleNamespace
 
 import cxas_app.tools.verify_login.python_function.python_code as tool
+from lib.fakes import (
+    _ACTIVE_FIXTURE_STATE,
+    ALWAYS_WRONG_LOGIN_CODES,
+    fixture_state_scope,
+    is_placeholder_code,
+    login_code_accepted,
+    secret_pin_accepted,
+)
+
+tool._ACTIVE_FIXTURE_STATE = _ACTIVE_FIXTURE_STATE
+tool.fixture_state_scope = fixture_state_scope
+tool.ALWAYS_WRONG_LOGIN_CODES = ALWAYS_WRONG_LOGIN_CODES
+tool.is_placeholder_code = is_placeholder_code
+tool._is_placeholder_code = is_placeholder_code
+tool.login_code_accepted = login_code_accepted
+tool.secret_pin_accepted = secret_pin_accepted
 
 
 def test_verify_login_happy_path(monkeypatch) -> None:
@@ -43,7 +59,7 @@ def test_verify_login_already_verified(monkeypatch) -> None:
 
 def test_verify_login_wrong_code(monkeypatch) -> None:
     session = SimpleNamespace(
-        state={"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0.0}
+        state={"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0.0, "fx_otp_on_file": "123456"}
     )
     monkeypatch.setattr(tool, "context", session, raising=False)
     reply = tool.verify_login(code="999999")
@@ -56,7 +72,7 @@ def test_verify_login_placeholder_codes_return_code_not_received_without_strike(
         state={"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0.0}
     )
     monkeypatch.setattr(tool, "context", session, raising=False)
-    for placeholder in ("", "   ", "0000", "000000", "12", "123", "1111"):
+    for placeholder in ("", "   ", "0000", "000000", "12", "123"):
         reply = tool.verify_login(code=placeholder)
         assert reply["status"] == "error"
         assert reply["error"] == "CODE_NOT_RECEIVED"
@@ -159,7 +175,7 @@ def test_verify_login_adk_state_three_strike_lockout_and_no_bypass(monkeypatch) 
         def __contains__(self, k: object) -> bool:
             return k in self._d
 
-    st = FakeAdkState({"account_id": "A1001", "auth_status": "code_sent"})
+    st = FakeAdkState({"account_id": "A1001", "auth_status": "code_sent", "fx_otp_on_file": "123456"})
     assert not isinstance(st, dict)
     monkeypatch.setattr(tool, "context", SimpleNamespace(state=st), raising=False)
 
@@ -233,4 +249,27 @@ def test_verify_login_scopes_current_active_plans_by_browsed_plan_category(monke
     r_second = tool.verify_login(code="1234", language="es-US")
     assert r_second["status"] == "ok"
     assert r_second["data"]["current_active_plans"]["mobility"]["name"] == "Movilidad Inicial 10 GB"
+
+
+def test_verify_login_pin_1111_succeeds_without_fx_pin_on_file(monkeypatch) -> None:
+    session = SimpleNamespace(
+        state={"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0.0}
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.verify_login(code="1111")
+    assert reply["status"] == "ok"
+    assert reply["data"]["auth_status"] == "pass"
+    assert reply["data"]["verified"] is True
+    assert session.state["auth_status"] == "pass"
+
+
+def test_verify_login_pin_1111_fails_when_fx_pin_on_file_mismatches(monkeypatch) -> None:
+    session = SimpleNamespace(
+        state={"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0.0, "fx_pin_on_file": "8374"}
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.verify_login(code="1111")
+    assert reply["status"] == "error"
+    assert reply["error"] == "WRONG_CODE"
+    assert session.state["auth_failure_count"] == 1.0
 
