@@ -254,9 +254,14 @@ MARKDOWN_RE = re.compile(  # pragma: no cover
     re.MULTILINE,
 )
 
+_SP_EVENT_TAG = re.compile(  # pragma: no cover
+    r"<event\b[^>]*>[\s\S]*?</event>|<event\b[^>]*/>",
+    re.IGNORECASE,
+)
+
 def strip_markdown(text: str) -> str:  # pragma: no cover
-    """Drop markdown formatting characters from spoken text."""
-    return MARKDOWN_RE.sub("", text)
+    """Drop markdown formatting characters and event tags from spoken text."""
+    return MARKDOWN_RE.sub("", _SP_EVENT_TAG.sub("", text))
 
 def clean_speech(text: str) -> str:  # pragma: no cover
     """Clean markdown formatting and long numbers from spoken text."""

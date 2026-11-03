@@ -965,6 +965,7 @@ def normalize_code(value: Any) -> str:  # pragma: no cover
     text = str(value).strip()
     if re.fullmatch(r"[+-]?\d+\.0+", text):
         text = text.split(".", 1)[0]
+    text = re.sub(r"[\s,\-]+", "", text)
     return "".join(ch for ch in text if ch.isdigit())
 
 def is_placeholder_code(val: Any) -> bool:  # pragma: no cover

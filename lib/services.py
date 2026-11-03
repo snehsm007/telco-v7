@@ -297,13 +297,17 @@ def _parse_int_in_range(val: Any, min_v: int, max_v: int) -> int | None:
 
 
 def _extract_last4(val: Any) -> str | None:
-    """Extract last 4 digits from card/bank input. Returns '' if empty, None if malformed or < 4 digits."""
+    """Extract last 4 digits from card/bank input. Returns '' if empty, None if malformed, contains letters, or < 4 digits."""
     if isinstance(val, bool):
         return None
-    digits = normalize_code(val)
-    if not digits:
+    s = str(val or "").strip()
+    if not s:
         return ""
-    if len(digits) < 4:
+    cleaned = re.sub(r"[\s,\-]+", "", s)
+    if any(c.isalpha() for c in cleaned):
+        return None
+    digits = normalize_code(cleaned)
+    if not digits or len(digits) < 4:
         return None
     return digits[-4:]
 
@@ -1615,6 +1619,24 @@ def verify_login_impl(
             },
         )
 
+    code_str = str(code_val or "").strip()
+    cleaned_code = re.sub(r"[\s,\-]+", "", code_str)
+    has_letters = any(c.isalpha() for c in cleaned_code)
+    if has_letters:
+        return error_reply(
+            "INVALID_INPUT",
+            reference=reference,
+            language=lang,
+            data={
+                "agent_action": localized_text(
+                    lang,
+                    "Ask the caller to enter or say their 4 to 10 digit code.",
+                    "Demander au client d'entrer ou d'énoncer son code de 4 à 10 chiffres.",
+                    "Pida al cliente que ingrese o diga su código de 4 a 10 dígitos.",
+                )
+            },
+        )
+
     if _is_placeholder_code(code_val):
         action_text = localized_text(
             lang,
@@ -1642,7 +1664,7 @@ def verify_login_impl(
             language=lang,
         )
 
-    digits = normalize_code(code_val)
+    digits = normalize_code(cleaned_code)
     if not (4 <= len(digits) <= 10):
         return error_reply(
             "INVALID_INPUT",
@@ -4001,9 +4023,18 @@ def initiate_number_transfer_impl(
     target_phone = str(phone_to_transfer).strip() if str(phone_to_transfer or "").strip() else str(transfer_number or kwargs.get("transfer_number", "")).strip()
     if not target_phone and state.get("auth_status") == "pass":
         target_phone = str(state.get("caller_provided_phone_last4") or state.get("phone_last4") or (ACCOUNTS[0]["phone"] if ACCOUNTS else ""))
+    tp_cleaned = re.sub(r"[\s,\-]+", "", target_phone)
+    if tp_cleaned.isdigit():
+        target_phone = tp_cleaned
 
     can_raw = str(carrier_account_number or kwargs.get("account_number") or kwargs.get("donor_account_number") or "").strip()
     ppin_raw = str(port_pin or kwargs.get("pin") or kwargs.get("donor_pin") or kwargs.get("transfer_pin") or "").strip()
+    can_cleaned = re.sub(r"[\s,\-]+", "", can_raw)
+    ppin_cleaned = re.sub(r"[\s,\-]+", "", ppin_raw)
+    if can_cleaned and not any(c.isalpha() for c in can_cleaned):
+        can_raw = can_cleaned
+    if ppin_cleaned and not any(c.isalpha() for c in ppin_cleaned):
+        ppin_raw = ppin_cleaned
     carrier = str(current_carrier or kwargs.get("carrier") or kwargs.get("donor_carrier") or "").strip()
 
     account_id = str(state.get("account_id") or (ACCOUNTS[0]["account_id"] if ACCOUNTS else "ACC-0001"))

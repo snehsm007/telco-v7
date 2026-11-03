@@ -19,6 +19,10 @@ MARKDOWN_RE = re.compile(
     r"```[a-zA-Z0-9_-]*[ \t]*\n?|\*+|`+|^#+[ \t]*|^[ \t]*[-•][ \t]+",
     re.MULTILINE,
 )
+_SP_EVENT_TAG = re.compile(
+    r"<event\b[^>]*>[\s\S]*?</event>|<event\b[^>]*/>",
+    re.IGNORECASE,
+)
 _LAST4_CONTEXT_RE = re.compile(
     r"((?:ending\s+in|terminant\s+par|terminad?[oa]?\s+en|number\s+is|num[eé]ro\s+est|n[uú]mero\s+es)\s+)(\d{4})\b",
     re.IGNORECASE,
@@ -173,8 +177,8 @@ def mask_long_numbers(text: str, min_digits: int = 9) -> str:
 
 
 def strip_markdown(text: str) -> str:
-    """Drop markdown formatting characters from spoken text."""
-    return MARKDOWN_RE.sub("", text)
+    """Drop markdown formatting characters and event tags from spoken text."""
+    return MARKDOWN_RE.sub("", _SP_EVENT_TAG.sub("", text))
 
 
 def clean_speech(text: str) -> str:

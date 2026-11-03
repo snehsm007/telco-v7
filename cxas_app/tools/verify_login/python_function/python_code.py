@@ -1212,6 +1212,7 @@ def normalize_code(value: Any) -> str:  # pragma: no cover
     text = str(value).strip()
     if re.fullmatch(r"[+-]?\d+\.0+", text):
         text = text.split(".", 1)[0]
+    text = re.sub(r"[\s,\-]+", "", text)
     return "".join(ch for ch in text if ch.isdigit())
 
 def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
@@ -2254,6 +2255,24 @@ def verify_login_impl(  # pragma: no cover
             },
         )
 
+    code_str = str(code_val or "").strip()
+    cleaned_code = re.sub(r"[\s,\-]+", "", code_str)
+    has_letters = any(c.isalpha() for c in cleaned_code)
+    if has_letters:
+        return error_reply(
+            "INVALID_INPUT",
+            reference=reference,
+            language=lang,
+            data={
+                "agent_action": localized_text(
+                    lang,
+                    "Ask the caller to enter or say their 4 to 10 digit code.",
+                    "Demander au client d'entrer ou d'énoncer son code de 4 à 10 chiffres.",
+                    "Pida al cliente que ingrese o diga su código de 4 a 10 dígitos.",
+                )
+            },
+        )
+
     if _is_placeholder_code(code_val):
         action_text = localized_text(
             lang,
@@ -2281,7 +2300,7 @@ def verify_login_impl(  # pragma: no cover
             language=lang,
         )
 
-    digits = normalize_code(code_val)
+    digits = normalize_code(cleaned_code)
     if not (4 <= len(digits) <= 10):
         return error_reply(
             "INVALID_INPUT",

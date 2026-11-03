@@ -851,6 +851,11 @@ _FRENCH_MARKERS = frozenset(  # pragma: no cover
     }
 )
 
+_RE_EVENT_TAG = re.compile(  # pragma: no cover
+    r"<event\b[^>]*>[\s\S]*?</event>|<event\b[^>]*/>",
+    re.IGNORECASE,
+)
+
 _RE_STATE_UPDATE = re.compile(  # pragma: no cover
     r"<state_update\b[^>]*>[\s\S]*?</state_update>|<state_update\b[^>]*/>",
     re.IGNORECASE,
@@ -891,7 +896,7 @@ def detect_utterance_language(  # pragma: no cover
             is_turn_1 = False
 
     raw = str(utterance or "").strip()
-    raw = _RE_STATE_UPDATE.sub("", raw).strip()
+    raw = _RE_EVENT_TAG.sub("", _RE_STATE_UPDATE.sub("", raw)).strip()
     if is_turn_1 and not language_locked:
         if re.fullmatch(
             r"(?:\[?(?:dtmf|touch-?tone|keypad|option|choice|touche|user)?\s*[:#-]?\s*)?2(?:[.#*]|\]|\s)*",
@@ -1029,7 +1034,8 @@ def _is_relay_or_quoted_part(txt: str) -> bool:  # pragma: no cover
     if _RE_RELAY_PREFIX.match(s):
         return True
     cleaned = _RE_QUOTED_AGENT_BLOCK.sub("", s)
-    cleaned = _RE_STATE_UPDATE.sub("", cleaned).strip()
+    cleaned = _RE_STATE_UPDATE.sub("", cleaned)
+    cleaned = _RE_EVENT_TAG.sub("", cleaned).strip()
     if not cleaned:
         return True
     if _RE_RELAY_PREFIX.match(cleaned):
@@ -1050,13 +1056,13 @@ def extract_user_utterances(llm_request: Any) -> list[str]:  # pragma: no cover
                     txt = getattr(part, "text", None)
                     if txt and isinstance(txt, str) and txt.strip():
                         if not _is_relay_or_quoted_part(txt):
-                            sanitized = _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", txt)).strip()
+                            sanitized = _RE_EVENT_TAG.sub("", _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", txt))).strip()
                             if sanitized:
                                 utterances.append(sanitized)
             elif isinstance(getattr(item, "text", None), str):
                 t = item.text.strip()
                 if t and not _is_relay_or_quoted_part(t):
-                    sanitized = _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", t)).strip()
+                    sanitized = _RE_EVENT_TAG.sub("", _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", t))).strip()
                     if sanitized:
                         utterances.append(sanitized)
     return utterances

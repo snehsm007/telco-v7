@@ -208,3 +208,132 @@ def test_bug_c_invalid_secondary_identifier_rejected():
 def test_bug_d_run_timeout_env_config():
     """RUN_TIMEOUT_S defaults to 14400s or respects environment override."""
     assert run_bench.RUN_TIMEOUT_S >= 9000
+
+
+# ============================================================================
+# Bug E: Telephony Event Tag Stripping & Language Detection
+# ============================================================================
+
+def test_bug_e_telephony_event_tag_stripping_french():
+    """Turn 0 <event>session start</event> does not prevent Turn 1 French lock."""
+    from lib.dynamic_prompt import detect_active_call_language, extract_user_utterances
+
+    class DummyPart:
+        def __init__(self, text):
+            self.text = text
+
+    class DummyContent:
+        def __init__(self, role, text):
+            self.role = role
+            self.parts = [DummyPart(text)]
+
+    class DummyRequest:
+        def __init__(self, texts):
+            self.contents = [DummyContent("user", t) for t in texts]
+
+    req = DummyRequest(["<event>session start</event>", "Bonjour, ma facture est trop élevée"])
+    utts = extract_user_utterances(req)
+    assert len(utts) == 1
+    assert utts[0] == "Bonjour, ma facture est trop élevée"
+
+    lang = detect_active_call_language({}, req)
+    assert lang == "fr-CA"
+
+
+def test_bug_e_telephony_event_tag_stripping_spanish_and_no_input():
+    """Turn 0 event + mid-call no-input event does not disrupt language detection."""
+    from lib.dynamic_prompt import detect_active_call_language, extract_user_utterances
+
+    class DummyPart:
+        def __init__(self, text):
+            self.text = text
+
+    class DummyContent:
+        def __init__(self, role, text):
+            self.role = role
+            self.parts = [DummyPart(text)]
+
+    class DummyRequest:
+        def __init__(self, texts):
+            self.contents = [DummyContent("user", t) for t in texts]
+
+    req_es = DummyRequest(["<event>session start</event>", "Hola, quiero pagar mi factura"])
+    assert detect_active_call_language({}, req_es) == "es-US"
+
+    req_no_input = DummyRequest([
+        "<event>session start</event>",
+        "Bonjour",
+        "<event>no-input</event>",
+        "Oui, je veux annuler mon forfait",
+    ])
+    utts = extract_user_utterances(req_no_input)
+    assert len(utts) == 2
+    assert detect_active_call_language({}, req_no_input) == "fr-CA"
+
+
+def test_bug_e_speech_strip_markdown_event_tags():
+    """Spoken text clean_speech strips <event> tags cleanly."""
+    from lib.speech import strip_markdown
+    res = strip_markdown("<event>session start</event>Hello world")
+    assert res.strip() == "Hello world"
+
+
+# ============================================================================
+# Bug F: Speech-to-Text Digit Grouping & Rejection of Letters
+# ============================================================================
+
+def test_bug_f_verify_login_comma_and_space_grouped_codes():
+    """PIN and OTP with spaces or commas are normalized and accepted."""
+    state_pin = {"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0}
+    res_pin = verify_login_impl(code="3 0 1 2", state=state_pin)
+    assert res_pin.get("status") == "ok"
+    assert res_pin.get("data", {}).get("verified") is True
+
+    state_otp = {"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0}
+    res_otp = verify_login_impl(code="123,456", state=state_otp)
+    assert res_otp.get("status") == "ok"
+    assert res_otp.get("data", {}).get("verified") is True
+
+
+def test_bug_f_verify_login_rejects_letters_and_malformed():
+    """Codes containing letters or invalid lengths return INVALID_INPUT."""
+    state = {"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0}
+    res1 = verify_login_impl(code="1234abcd", state=state)
+    assert res1.get("status") == "error"
+    assert res1.get("error") == "INVALID_INPUT"
+
+    res2 = verify_login_impl(code="abcd", state=state)
+    assert res2.get("status") == "error"
+    assert res2.get("error") == "INVALID_INPUT"
+
+    res3 = verify_login_impl(code="1234567890123", state=state)
+    assert res3.get("status") == "error"
+    assert res3.get("error") == "INVALID_INPUT"
+
+
+def test_bug_f_extract_last4_grouped_digits_and_rejects_letters():
+    """Card and bank last4 extraction handles grouped digits and rejects letters."""
+    from lib.services import _extract_last4
+    assert _extract_last4("7 7 4 2") == "7742"
+    assert _extract_last4("7,7,4,2") == "7742"
+    assert _extract_last4("1234, 5678, 9012, 7742") == "7742"
+    assert _extract_last4("774a") is None
+    assert _extract_last4("visa1234") is None
+    assert _extract_last4("12") is None
+
+
+def test_bug_f_initiate_number_transfer_grouped_digits():
+    """Initiate number transfer normalizes phone, carrier account, and PIN."""
+    from lib.services import initiate_number_transfer_impl
+    state = {"account_id": "A1001", "auth_status": "pass"}
+    res = initiate_number_transfer_impl(
+        phone_to_transfer="202, 555, 0143",
+        carrier_account_number="888, 777, 666",
+        port_pin="3 0 1 2",
+        current_carrier="OtherCarrier",
+        state=state,
+    )
+    assert res.get("status") == "ok"
+    assert res.get("data", {}).get("phone_to_transfer") == "2025550143"
+    assert "carrier_account_number" not in res.get("data", {}).get("missing_details", [])
+    assert "port_pin" not in res.get("data", {}).get("missing_details", [])

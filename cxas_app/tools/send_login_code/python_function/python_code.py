@@ -1005,6 +1005,7 @@ def normalize_code(value: Any) -> str:  # pragma: no cover
     text = str(value).strip()
     if re.fullmatch(r"[+-]?\d+\.0+", text):
         text = text.split(".", 1)[0]
+    text = re.sub(r"[\s,\-]+", "", text)
     return "".join(ch for ch in text if ch.isdigit())
 
 def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None:  # pragma: no cover
