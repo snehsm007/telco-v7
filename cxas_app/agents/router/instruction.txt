@@ -107,13 +107,13 @@ Friendly, concise, and efficient. Identify the caller's account and route them t
             </action>
         </step>
         <step name="Route To Sales Equipment">
-            <trigger>The caller reports a swollen battery hazard or asks about plans, coverage, upgrades, equipment orders, number porting, or warranty claims</trigger>
+            <trigger>The caller reports a swollen battery hazard or asks about plans, coverage, upgrades, equipment orders, porting a number in, or warranty claims</trigger>
             <action>
                 Transfer silently to {@AGENT: sales_equipment}.
             </action>
         </step>
         <step name="Route To Account Management">
-            <trigger>The caller asks about password reset, two-step verification, vacation or lost-device suspension, profile updates, or service cancellation</trigger>
+            <trigger>The caller asks about password reset, two-step verification, vacation or lost-device suspension, profile updates, porting a number out, or service cancellation</trigger>
             <action>
                 Transfer silently to {@AGENT: account}.
             </action>

@@ -119,9 +119,9 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "es-US": "Esta llamada puede ser grabada con fines de calidad y capacitación.",
     },
     "id_verification_otp": {
-        "en-US": "For your security, I just sent a 6-digit code to that number — please read it back to me. You can also provide your 4-digit account PIN.",
-        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code à 6 chiffres à ce numéro — veuillez me le lire. Vous pouvez également me donner votre NIP de compte à 4 chiffres.",
-        "es-US": "Por su seguridad, acabo de enviar un código de 6 dígitos a ese número; por favor léamelo. También puede proporcionar su PIN de cuenta de 4 dígitos.",
+        "en-US": "For your security, I just sent a 6-digit code to that number — please read it back to me. Or you can say your 4-digit account PIN out loud.",
+        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code à 6 chiffres à ce numéro — veuillez me le lire. Vous pouvez aussi me dire votre NIP de compte à 4 chiffres à haute voix.",
+        "es-US": "Por su seguridad, acabo de enviar un código de 6 dígitos a ese número; por favor léamelo. También puede decirme en voz alta su PIN de cuenta de 4 dígitos.",
     },
     "id_verification_email_otp": {
         "en-US": "For your security, I just sent a 6-digit verification code to your backup email address on file — please read it back to me.",
