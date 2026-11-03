@@ -1012,16 +1012,41 @@ def lookup_account_impl(
     state["bank_last4"] = bank_on_file if bank_on_file else (state.get("bank_last4") or "6789")
     state["current_balance"] = str(account.get("current_balance") or "0.00")
     state["past_due_balance"] = str(account.get("past_due_balance") or "0.00")
-    state["is_suspended"] = account.get("is_suspended", False)
-    state["suspension_reason"] = account.get("suspension_reason", "")
+    fx_susp = get_fixture_fact(state, "fx_account_suspended")
+    if fx_susp is not None:
+        state["is_suspended"] = str(fx_susp).strip().lower() in ("true", "1", "yes")
+        account["is_suspended"] = state["is_suspended"]
+        account["status"] = "suspended" if state["is_suspended"] else "active"
+    else:
+        state["is_suspended"] = account.get("is_suspended", False)
+
+    fx_reason = get_fixture_fact(state, "fx_suspension_reason")
+    if fx_reason:
+        state["suspension_reason"] = str(fx_reason).strip()
+        account["suspension_reason"] = str(fx_reason).strip()
+    else:
+        state["suspension_reason"] = account.get("suspension_reason", "")
+
+    fx_mfa = get_fixture_fact(state, "fx_mfa_enabled")
+    if fx_mfa is not None:
+        state["mfa_enabled"] = str(fx_mfa).strip().lower() in ("true", "1", "yes")
+        account["mfa_enabled"] = state["mfa_enabled"]
+    elif "mfa_enabled" in account:
+        state["mfa_enabled"] = account["mfa_enabled"]
 
     pc = (str(postal_code or state.get("postal_code") or "")).strip().upper()
     reg_alert = ""
+    fx_outage = get_fixture_fact(state, "fx_outage_status")
+    has_outage_banner = (
+        str(fx_outage).strip().lower() in ("active", "outage", "true", "yes")
+        if fx_outage is not None
+        else (bool(pc) and any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES))
+    )
     if pc:
         state["postal_code"] = pc
-        if any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES):
-            reg_alert = spoken_line("service_alert_banner", lang)
-            state["regional_alert"] = reg_alert
+    if has_outage_banner:
+        reg_alert = spoken_line("service_alert_banner", lang)
+        state["regional_alert"] = reg_alert
 
     if account.get("preferred_language") and not state.get("preferred_language"):
         state["preferred_language"] = account["preferred_language"]
@@ -1040,6 +1065,9 @@ def lookup_account_impl(
         "account_found": True,
         "auth_status": state["auth_status"],
         "regional_alert": reg_alert,
+        "is_suspended": state["is_suspended"],
+        "suspension_reason": state["suspension_reason"],
+        "mfa_enabled": state.get("mfa_enabled", False),
     }
     if email_val:
         reply_data["email"] = email_val
@@ -1761,8 +1789,19 @@ def get_billing_summary_impl(
     past_due = str(state.get("past_due_balance") or "0.00")
     card_l4 = str(state.get("card_last4") or "7742")
     bank_l4 = str(state.get("bank_last4") or "6789")
-    is_susp = bool(state.get("is_suspended", False))
-    susp_reason = str(state.get("suspension_reason") or "")
+    fx_susp = get_fixture_fact(state, "fx_account_suspended")
+    if fx_susp is not None:
+        is_susp = str(fx_susp).strip().lower() in ("true", "1", "yes")
+        state["is_suspended"] = is_susp
+    else:
+        is_susp = bool(state.get("is_suspended", False))
+
+    fx_reason = get_fixture_fact(state, "fx_suspension_reason")
+    if fx_reason:
+        susp_reason = str(fx_reason).strip()
+        state["suspension_reason"] = susp_reason
+    else:
+        susp_reason = str(state.get("suspension_reason") or "")
     autopay = bool(state.get("autopay_enrolled", False))
     pay_arr = bool(state.get("payment_arrangement_active", False))
     line_items = FAKE_BILLING_LEDGER.get("recent_line_items", [])
@@ -1828,10 +1867,22 @@ def get_billing_summary_impl(
     last_pmt_date = str(posted_pmts[0].get("date", "2026-10-15")) if posted_pmts else "2026-10-15"
     last_pmt_method = str(state.get("last_payment_method") or (posted_pmts[0].get("payment_method", "card") if posted_pmts else "card"))
 
-    try:
-        last_pmt_dec = Decimal(str(last_pmt_amt_str))
-    except Exception:
-        last_pmt_dec = Decimal("0.00")
+    fx_unapp = get_fixture_fact(state, "fx_unapplied_payment")
+    if fx_unapp and str(fx_unapp).strip().lower() not in {"none", "0", "false"}:
+        try:
+            last_pmt_dec = Decimal(str(fx_unapp))
+            last_pmt_amt_str = display_amount(last_pmt_dec)
+            last_pmt_date = "2026-10-28"
+        except Exception:
+            try:
+                last_pmt_dec = Decimal(str(last_pmt_amt_str))
+            except Exception:
+                last_pmt_dec = Decimal("0.00")
+    else:
+        try:
+            last_pmt_dec = Decimal(str(last_pmt_amt_str))
+        except Exception:
+            last_pmt_dec = Decimal("0.00")
 
     method_l4 = bank_l4 if ("bank" in last_pmt_method.lower()) else card_l4
 
@@ -2030,7 +2081,18 @@ def process_bill_payment_impl(
         w in pm_low for w in ("new", "nouvelle", "nouveau", "nueva", "capture", "keypad", "clavier")
     )
 
-    if l4 in DECLINED_CARD_LAST4:
+    fx_card_status = get_fixture_fact(state, "fx_card_on_file_status")
+    is_card_on_file_declined_fixture = (
+        str(fx_card_status).strip().lower() == "declined"
+        and not is_bank
+        and not state.get("declined_card_last4")
+        and (
+            pm_low in ("card_on_file", "")
+            or (not is_new_card and (not l4_parsed or l4_parsed == def_c4_b))
+        )
+    )
+
+    if l4 in DECLINED_CARD_LAST4 or is_card_on_file_declined_fixture:
         failures = read_count(state, "payment_failure_count") + 1
         state["payment_failure_count"] = failures
         if is_bank:
@@ -2051,15 +2113,30 @@ def process_bill_payment_impl(
                     "lockout_triggered": True,
                 },
             )
+        declined_msg = localized_text(
+            lang,
+            f"The card on file ending in {l4} was declined. Please provide an alternate card or bank account to complete your payment.",
+            f"La carte au dossier se terminant par {l4} a été refusée. Veuillez fournir une autre carte ou un compte bancaire pour effectuer votre paiement.",
+            f"La tarjeta registrada que termina en {l4} fue rechazada. Por favor proporcione una tarjeta alternativa o cuenta bancaria para completar su pago.",
+        )
         return error_reply(
             "PAYMENT_DECLINED",
             reference=reference,
             language=lang,
+            message=declined_msg,
             data={
                 "payment_failure_count": failures,
                 "card_last4": "" if not is_bank else state.get("card_last4", ""),
                 "declined_card_last4": l4,
                 "payment_declined_once": True,
+                "card_on_file_status": "declined",
+                "spoken_message": declined_msg,
+                "agent_action": localized_text(
+                    lang,
+                    "Inform the caller that the card on file was declined, and ask for an alternate card or bank account details.",
+                    "Informer le client que la carte au dossier a été refusée et demander une autre carte ou des coordonnées bancaires.",
+                    "Informe al cliente que la tarjeta registrada fue rechazada y solicite una tarjeta alternativa o detalles de una cuenta bancaria.",
+                ),
             },
         )
 
@@ -2075,7 +2152,12 @@ def process_bill_payment_impl(
         cur_bal_dec = Decimal("0.00")
 
     was_past_due = past_due_dec > Decimal("0.00")
-    was_suspended = bool(state.get("is_suspended", False))
+    fx_susp = get_fixture_fact(state, "fx_account_suspended")
+    if fx_susp is not None:
+        was_suspended = str(fx_susp).strip().lower() in ("true", "1", "yes")
+        state["is_suspended"] = was_suspended
+    else:
+        was_suspended = bool(state.get("is_suspended", False))
 
     new_cur_bal = max(Decimal("0.00"), cur_bal_dec - amt_val)
     new_past_due = max(Decimal("0.00"), past_due_dec - amt_val)
@@ -2839,7 +2921,17 @@ def check_regional_outage_impl(
 
     state["postal_code"] = str(pc)
     clean_pc = pc.replace(" ", "")
-    is_outage = any(clean_pc.startswith(p) for p in OUTAGE_POSTAL_PREFIXES)
+    fx_outage = get_fixture_fact(state, "fx_outage_status")
+    if fx_outage is not None:
+        fx_out_str = str(fx_outage).strip().lower()
+        if fx_out_str in ("active", "outage", "true", "yes"):
+            is_outage = True
+        elif fx_out_str in ("none", "false", "no", "normal"):
+            is_outage = False
+        else:
+            is_outage = any(clean_pc.startswith(p) for p in OUTAGE_POSTAL_PREFIXES)
+    else:
+        is_outage = any(clean_pc.startswith(p) for p in OUTAGE_POSTAL_PREFIXES)
     state["outage_active"] = is_outage
 
     if is_outage:
@@ -3070,19 +3162,64 @@ def get_appointment_and_ticket_status_impl(
     tkt = dyn_apts["repair_ticket"]
     slots = dyn_apts["available_reschedule_slots"]
 
-    state["active_appointment_id"] = apt["appointment_id"]
-    state["appointment_status"] = apt["status"]
-    state["technician_status"] = apt["technician_status"]
+    fx_tech = get_fixture_fact(state, "fx_tech_status")
+    tech_status = str(fx_tech).strip().lower() if fx_tech else str(apt.get("technician_status") or "scheduled").lower()
+    if tech_status in ("delayed", "retard", "retrasado"):
+        tech_status = "delayed"
+        loc_window_display = localized_text(
+            lang,
+            "1:00 PM - 3:00 PM (Delayed)",
+            "13 h 00 - 15 h 00 (En retard)",
+            "1:00 PM - 3:00 PM (Retrasado)",
+        )
+        tech_note = localized_text(
+            lang,
+            "Technician Marc-Andre is delayed due to an earlier job. Estimated arrival is now between 1:00 PM and 3:00 PM. Would you like to keep this appointment or reschedule to another day?",
+            "Le technicien Marc-André a du retard en raison d'une intervention précédente. L'arrivée est maintenant prévue entre 13 h 00 et 15 h 00. Souhaitez-vous maintenir ce rendez-vous ou le reporter à un autre jour ?",
+            "El técnico Marc-Andre está retrasado debido a un trabajo anterior. La llegada estimada ahora es entre la 1:00 PM y las 3:00 PM. ¿Desea mantener esta cita o reprogramarla para otro día?",
+        )
+        apt_copy = dict(apt)
+        apt_copy["status"] = "delayed"
+        apt_copy["technician_status"] = "delayed"
+        apt_copy["window_display"] = loc_window_display
+        apt_copy["arrival_window"] = loc_window_display
+        apt_copy["delayed_eta"] = loc_window_display
+        apt_copy["delay_reason"] = "prior_job_overrun"
+        apt_copy["reschedule_offered"] = True
+    elif tech_status in ("en_route", "en route", "enroute"):
+        tech_status = "en_route"
+        loc_window_display = localized_text(
+            lang,
+            "8:00 AM - 12:00 PM",
+            "8 h 00 - 12 h 00",
+            "8:00 AM - 12:00 PM",
+        )
+        tech_note = localized_text(
+            lang,
+            "Technician Marc-Andre is currently en route and expected within the scheduled window (8:00 AM - 12:00 PM).",
+            "Le technicien Marc-André est actuellement en route et prévu pendant la plage horaire prévue (8 h 00 - 12 h 00).",
+            "El técnico Marc-Andre está actualmente en camino y se espera dentro del horario programado (8:00 AM - 12:00 PM).",
+        )
+        apt_copy = dict(apt)
+        apt_copy["technician_status"] = "en_route"
+        apt_copy["window_display"] = loc_window_display
+        apt_copy["arrival_window"] = loc_window_display
+    else:
+        tech_status = "scheduled"
+        loc_window_display = localized_text(
+            lang,
+            "8:00 AM - 12:00 PM",
+            "8 h 00 - 12 h 00",
+            "8:00 AM - 12:00 PM",
+        )
+        tech_note = ""
+        apt_copy = dict(apt)
+        apt_copy["window_display"] = loc_window_display
+        apt_copy["arrival_window"] = loc_window_display
 
-    loc_window_display = localized_text(
-        lang,
-        "8:00 AM - 12:00 PM",
-        "8 h 00 - 12 h 00",
-        "8:00 AM - 12:00 PM",
-    )
-    apt_copy = dict(apt)
-    apt_copy["window_display"] = loc_window_display
-    apt_copy["arrival_window"] = loc_window_display
+    state["active_appointment_id"] = apt["appointment_id"]
+    state["appointment_status"] = apt_copy["status"]
+    state["technician_status"] = tech_status
 
     win_key = "window_fr" if lang == "fr-CA" else ("window_es" if lang == "es-US" else "window_en")
     localized_slots = []
@@ -3091,19 +3228,32 @@ def get_appointment_and_ticket_status_impl(
         s_copy["window"] = s.get(win_key, s.get("window_en", ""))
         localized_slots.append(s_copy)
 
+    reply_payload: dict[str, Any] = {
+        "active_appointment": apt_copy,
+        "repair_ticket": tkt,
+        "available_slots": localized_slots,
+        "appointment_id": apt["appointment_id"],
+        "scheduled_date": apt["scheduled_date"],
+        "arrival_window": loc_window_display,
+        "window_display": loc_window_display,
+        "technician_status": tech_status,
+        "ticket_id": tkt["ticket_id"],
+        "ticket_status": tkt["status"],
+    }
+    if tech_note:
+        reply_payload["spoken_message"] = tech_note
+    if tech_status == "delayed":
+        reply_payload["delayed_eta"] = loc_window_display
+        reply_payload["delay_note"] = tech_note
+        reply_payload["reschedule_offered"] = True
+        reply_payload["agent_action"] = localized_text(
+            lang,
+            "Inform the caller that the technician is delayed with arrival now between 1:00 PM and 3:00 PM, and offer the available reschedule slots.",
+            "Informer le client que le technicien est en retard avec une arrivée prévue entre 13 h 00 et 15 h 00, et proposer les plages de report disponibles.",
+            "Informe al cliente que el técnico está retrasado con llegada entre la 1:00 PM y las 3:00 PM, y ofrezca las opciones de reprogramación disponibles.",
+        )
     return ok_reply(
-        {
-            "active_appointment": apt_copy,
-            "repair_ticket": tkt,
-            "available_slots": localized_slots,
-            "appointment_id": apt["appointment_id"],
-            "scheduled_date": apt["scheduled_date"],
-            "arrival_window": loc_window_display,
-            "window_display": loc_window_display,
-            "technician_status": apt["technician_status"],
-            "ticket_id": tkt["ticket_id"],
-            "ticket_status": tkt["status"],
-        },
+        reply_payload,
         reference,
         language=lang,
     )
@@ -4080,6 +4230,35 @@ def send_password_reset_sms_impl(
     reference = tracking_id("send_password_reset_sms", account_id)
     state["last_tracking_id"] = reference
 
+    fx_sms = get_fixture_fact(state, "fx_sms_delivery")
+    is_failed_delivery = str(fx_sms).strip().lower() == "failed"
+
+    if is_failed_delivery and state.get("password_reset_sent"):
+        action_text = localized_text(
+            lang,
+            "Explain that SMS delivery to this mobile number failed. Offer transfer to a live representative or email recovery.",
+            "Expliquez que l'envoi du SMS à ce numéro de mobile a échoué. Proposez le transfert à un représentant en direct ou la récupération par courriel.",
+            "Explique que falló la entrega del SMS a este número de móvil. Ofrezca transferencia a un representante en vivo o recuperación por correo.",
+        )
+        msg_text = localized_text(
+            lang,
+            "SMS delivery of the password reset link failed. Please speak to a representative for account assistance.",
+            "L'envoi par SMS du lien de réinitialisation a échoué. Veuillez vous adresser à un représentant pour obtenir de l'aide.",
+            "Falló la entrega por SMS del enlace de restablecimiento. Por favor hable con un representante para recibir asistencia.",
+        )
+        return error_reply(
+            "CODE_NOT_SENT",
+            message=msg_text,
+            agent_action=action_text,
+            reference=reference,
+            language=lang,
+            data={
+                "sms_delivery_status": "failed",
+                "must_escalate": True,
+                "agent_action": action_text,
+            },
+        )
+
     _record_audit(state)
     state["password_reset_sent"] = True
 
@@ -4096,7 +4275,7 @@ def send_password_reset_sms_impl(
             lang,
             "A password reset link has been sent to the mobile phone on file and is valid for 30 minutes.",
             "Un lien de réinitialisation a été envoyé au cellulaire au dossier et est valide pendant 30 minutes.",
-            "Se ha enviado un enlace de restablecimiento al teléfono móvil registrado y es válido durante 30 minutos.",
+            "Se ha enviado un enlace de restablecimiento al teléfono móvil registrado y es válido durante 30 minutes.",
         )
 
     return ok_reply(
@@ -4108,6 +4287,7 @@ def send_password_reset_sms_impl(
             "can_change_password_by_voice": False,
             "spoken_summary": summary,
             "spoken_message": summary,
+            "sms_delivery_status": "failed" if is_failed_delivery else "delivered",
         },
         reference,
         language=lang,

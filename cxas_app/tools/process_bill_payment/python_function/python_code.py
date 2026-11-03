@@ -1626,16 +1626,41 @@ def lookup_account_impl(  # pragma: no cover
     state["bank_last4"] = bank_on_file if bank_on_file else (state.get("bank_last4") or "6789")
     state["current_balance"] = str(account.get("current_balance") or "0.00")
     state["past_due_balance"] = str(account.get("past_due_balance") or "0.00")
-    state["is_suspended"] = account.get("is_suspended", False)
-    state["suspension_reason"] = account.get("suspension_reason", "")
+    fx_susp = get_fixture_fact(state, "fx_account_suspended")
+    if fx_susp is not None:
+        state["is_suspended"] = str(fx_susp).strip().lower() in ("true", "1", "yes")
+        account["is_suspended"] = state["is_suspended"]
+        account["status"] = "suspended" if state["is_suspended"] else "active"
+    else:
+        state["is_suspended"] = account.get("is_suspended", False)
+
+    fx_reason = get_fixture_fact(state, "fx_suspension_reason")
+    if fx_reason:
+        state["suspension_reason"] = str(fx_reason).strip()
+        account["suspension_reason"] = str(fx_reason).strip()
+    else:
+        state["suspension_reason"] = account.get("suspension_reason", "")
+
+    fx_mfa = get_fixture_fact(state, "fx_mfa_enabled")
+    if fx_mfa is not None:
+        state["mfa_enabled"] = str(fx_mfa).strip().lower() in ("true", "1", "yes")
+        account["mfa_enabled"] = state["mfa_enabled"]
+    elif "mfa_enabled" in account:
+        state["mfa_enabled"] = account["mfa_enabled"]
 
     pc = (str(postal_code or state.get("postal_code") or "")).strip().upper()
     reg_alert = ""
+    fx_outage = get_fixture_fact(state, "fx_outage_status")
+    has_outage_banner = (
+        str(fx_outage).strip().lower() in ("active", "outage", "true", "yes")
+        if fx_outage is not None
+        else (bool(pc) and any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES))
+    )
     if pc:
         state["postal_code"] = pc
-        if any(pc.replace(" ", "").startswith(p) for p in OUTAGE_POSTAL_PREFIXES):
-            reg_alert = spoken_line("service_alert_banner", lang)
-            state["regional_alert"] = reg_alert
+    if has_outage_banner:
+        reg_alert = spoken_line("service_alert_banner", lang)
+        state["regional_alert"] = reg_alert
 
     if account.get("preferred_language") and not state.get("preferred_language"):
         state["preferred_language"] = account["preferred_language"]
@@ -1654,6 +1679,9 @@ def lookup_account_impl(  # pragma: no cover
         "account_found": True,
         "auth_status": state["auth_status"],
         "regional_alert": reg_alert,
+        "is_suspended": state["is_suspended"],
+        "suspension_reason": state["suspension_reason"],
+        "mfa_enabled": state.get("mfa_enabled", False),
     }
     if email_val:
         reply_data["email"] = email_val
@@ -2412,7 +2440,18 @@ def process_bill_payment_impl(  # pragma: no cover
         w in pm_low for w in ("new", "nouvelle", "nouveau", "nueva", "capture", "keypad", "clavier")
     )
 
-    if l4 in DECLINED_CARD_LAST4:
+    fx_card_status = get_fixture_fact(state, "fx_card_on_file_status")
+    is_card_on_file_declined_fixture = (
+        str(fx_card_status).strip().lower() == "declined"
+        and not is_bank
+        and not state.get("declined_card_last4")
+        and (
+            pm_low in ("card_on_file", "")
+            or (not is_new_card and (not l4_parsed or l4_parsed == def_c4_b))
+        )
+    )
+
+    if l4 in DECLINED_CARD_LAST4 or is_card_on_file_declined_fixture:
         failures = read_count(state, "payment_failure_count") + 1
         state["payment_failure_count"] = failures
         if is_bank:
@@ -2433,15 +2472,30 @@ def process_bill_payment_impl(  # pragma: no cover
                     "lockout_triggered": True,
                 },
             )
+        declined_msg = localized_text(
+            lang,
+            f"The card on file ending in {l4} was declined. Please provide an alternate card or bank account to complete your payment.",
+            f"La carte au dossier se terminant par {l4} a été refusée. Veuillez fournir une autre carte ou un compte bancaire pour effectuer votre paiement.",
+            f"La tarjeta registrada que termina en {l4} fue rechazada. Por favor proporcione una tarjeta alternativa o cuenta bancaria para completar su pago.",
+        )
         return error_reply(
             "PAYMENT_DECLINED",
             reference=reference,
             language=lang,
+            message=declined_msg,
             data={
                 "payment_failure_count": failures,
                 "card_last4": "" if not is_bank else state.get("card_last4", ""),
                 "declined_card_last4": l4,
                 "payment_declined_once": True,
+                "card_on_file_status": "declined",
+                "spoken_message": declined_msg,
+                "agent_action": localized_text(
+                    lang,
+                    "Inform the caller that the card on file was declined, and ask for an alternate card or bank account details.",
+                    "Informer le client que la carte au dossier a été refusée et demander une autre carte ou des coordonnées bancaires.",
+                    "Informe al cliente que la tarjeta registrada fue rechazada y solicite una tarjeta alternativa o detalles de una cuenta bancaria.",
+                ),
             },
         )
 
@@ -2457,7 +2511,12 @@ def process_bill_payment_impl(  # pragma: no cover
         cur_bal_dec = Decimal("0.00")
 
     was_past_due = past_due_dec > Decimal("0.00")
-    was_suspended = bool(state.get("is_suspended", False))
+    fx_susp = get_fixture_fact(state, "fx_account_suspended")
+    if fx_susp is not None:
+        was_suspended = str(fx_susp).strip().lower() in ("true", "1", "yes")
+        state["is_suspended"] = was_suspended
+    else:
+        was_suspended = bool(state.get("is_suspended", False))
 
     new_cur_bal = max(Decimal("0.00"), cur_bal_dec - amt_val)
     new_past_due = max(Decimal("0.00"), past_due_dec - amt_val)

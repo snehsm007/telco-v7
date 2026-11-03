@@ -1080,7 +1080,17 @@ def check_regional_outage_impl(  # pragma: no cover
 
     state["postal_code"] = str(pc)
     clean_pc = pc.replace(" ", "")
-    is_outage = any(clean_pc.startswith(p) for p in OUTAGE_POSTAL_PREFIXES)
+    fx_outage = get_fixture_fact(state, "fx_outage_status")
+    if fx_outage is not None:
+        fx_out_str = str(fx_outage).strip().lower()
+        if fx_out_str in ("active", "outage", "true", "yes"):
+            is_outage = True
+        elif fx_out_str in ("none", "false", "no", "normal"):
+            is_outage = False
+        else:
+            is_outage = any(clean_pc.startswith(p) for p in OUTAGE_POSTAL_PREFIXES)
+    else:
+        is_outage = any(clean_pc.startswith(p) for p in OUTAGE_POSTAL_PREFIXES)
     state["outage_active"] = is_outage
 
     if is_outage:
