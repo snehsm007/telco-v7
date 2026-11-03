@@ -345,4 +345,69 @@ def test_lookup_account_synthetic_relookup_turn_two(monkeypatch) -> None:
     assert session_ba.state["account_id"] == "BA-555019"
 
 
+def test_lookup_account_unauthorized_charge_billing_dispute_not_fraud(monkeypatch) -> None:
+    # Call #76: caller explicitly asks to dispute a charge on their bill
+    session = SimpleNamespace(
+        state={
+            "utterance": "My account number is 8849201. I see an unauthorized charge on my latest bill that I need to dispute.",
+            "last_user_utterance": "My account number is 8849201. I see an unauthorized charge on my latest bill that I need to dispute.",
+        }
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.lookup_account("8849201")
+    assert reply["status"] == "ok"
+    # Must NOT escalate to fraud; billing agent handles dispute
+    assert reply.get("must_escalate_immediately") is not True
+    assert reply["data"].get("must_escalate_immediately") is not True
+    assert reply["data"]["account_id"] == "ACC-9201"
+
+
+def test_lookup_account_unauthorized_service_escalates_to_fraud(monkeypatch) -> None:
+    # Call #98 pattern: unauthorized service or charge without explicit dispute intent
+    session = SimpleNamespace(
+        state={
+            "utterance": "I have been looking at my account and there are unauthorized charges on file.",
+            "last_user_utterance": "I have been looking at my account and there are unauthorized charges on file.",
+        }
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.lookup_account("202 555 0143")
+    assert reply["status"] == "ok"
+    assert reply["data"]["must_escalate_immediately"] is True
+    assert reply["data"]["escalation_reason"] == "fraud_escalation"
+    assert reply["data"]["target_queue"] == "fraud_and_security_24x7"
+
+
+def test_lookup_account_fraud_with_hacked_takeover_preempts_dispute(monkeypatch) -> None:
+    # sim__report_fraud_standard: even if dispute is mentioned, hack/takeover forces fraud escalation
+    session = SimpleNamespace(
+        state={
+            "utterance": "I want to dispute charges because someone hacked my account and committed identity theft",
+            "last_user_utterance": "I want to dispute charges because someone hacked my account and committed identity theft",
+        }
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.lookup_account("202 555 0143")
+    assert reply["status"] == "ok"
+    assert reply["data"]["must_escalate_immediately"] is True
+    assert reply["data"]["escalation_reason"] == "fraud_escalation"
+    assert reply["data"]["target_queue"] == "fraud_and_security_24x7"
+
+
+def test_lookup_account_french_billing_dispute_not_fraud(monkeypatch) -> None:
+    # sim__dispute_billing_charge_french pattern
+    session = SimpleNamespace(
+        state={
+            "utterance": "Je veux contester des frais d'appels non autorisés sur ma facture",
+            "last_user_utterance": "Je veux contester des frais d'appels non autorisés sur ma facture",
+        }
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply = tool.lookup_account("514-555-0199", language="fr-CA")
+    assert reply["status"] == "ok"
+    assert reply.get("must_escalate_immediately") is not True
+    assert reply["data"].get("must_escalate_immediately") is not True
+
+
+
 

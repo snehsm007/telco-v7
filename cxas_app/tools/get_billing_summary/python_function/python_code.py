@@ -1483,12 +1483,33 @@ def lookup_account_impl(  # pragma: no cover
         str(state.get("utterance") or ""),
         str(state.get("last_user_utterance") or ""),
     ]).lower()
-    fraud_kw = (
-        "fraud", "fraude", "hacked", "hacké", "piraté", "pirate", "stolen", "volé",
-        "unauthorized", "non autorisé", "compromised", "compromis", "sim swap", "sim-swap",
-        "usurpation", "identity theft", "usurpation d'identité"
+
+    # Billing dispute carveout (CUJ-2): when caller explicitly asks to dispute or contest a charge/fee
+    # on their bill (without alleging account takeover, hacking, SIM swap, or stolen identity),
+    # route to billing rather than immediate fraud escalation.
+    dispute_kw = (
+        "dispute", "disputing", "contester", "contestation", "disputar", "reclamar",
     )
-    is_fraud = any(w in combined_utt for w in fraud_kw) or str(state.get("intent_type", "")).lower() == "fraud"
+    takeover_kw = (
+        "hacked", "hacké", "piraté", "pirate", "stolen", "volé", "compromised",
+        "compromis", "sim swap", "sim-swap", "usurpation", "identity theft",
+        "usurpation d'identité", "takeover", "phishing", "hameçonnage",
+    )
+    is_dispute = any(w in combined_utt for w in dispute_kw)
+    has_takeover = any(w in combined_utt for w in takeover_kw)
+
+    fraud_kw = [
+        "fraud", "fraude", "hacked", "hacké", "piraté", "pirate", "stolen", "volé",
+        "compromised", "compromis", "sim swap", "sim-swap",
+        "usurpation", "identity theft", "usurpation d'identité",
+    ]
+    if not (is_dispute and not has_takeover):
+        fraud_kw.extend(["unauthorized", "non autorisé", "no autorizado"])
+
+    is_fraud = (
+        (any(w in combined_utt for w in fraud_kw) and not (is_dispute and not has_takeover))
+        or str(state.get("intent_type", "")).lower() == "fraud"
+    )
     if is_fraud:
         state["handoff_reason"] = "fraud_escalation"
         empathy = spoken_line("empathy_protocol", lang)
