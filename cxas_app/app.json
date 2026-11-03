@@ -957,6 +957,7 @@
   ],
   "guardrails": [
     "Default Safety Guardrail",
-    "Default Prompt Guardrail"
+    "Default Prompt Guardrail",
+    "Telco Deterministic Content Guardrail"
   ]
 }
