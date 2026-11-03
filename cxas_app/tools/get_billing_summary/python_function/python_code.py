@@ -978,6 +978,7 @@ MAX_LOGIN_ATTEMPTS = 3  # pragma: no cover
 NEGATIVE_INPUT_TOKENS: tuple[str, ...] = (  # pragma: no cover
     "wrong", "incorrect", "invalid", "unknown", "nonexistent",
     "none", "not found", "invalide", "faux", "invalido", "erroneo",
+    "fake", "nobody",
 )
 
 OUTAGE_POSTAL_PREFIXES: tuple[str, ...] = ("H3Z", "G1R")  # pragma: no cover
@@ -1637,9 +1638,18 @@ def lookup_account_impl(  # pragma: no cover
             account = dict(matched)
             resolved_by_email = True
 
-    # Lost-phone / Name + Email OR Postal Code resolution for unidentified callers (Cluster 4)
+    # Lost-phone / Name resolution for unidentified callers (Cluster 4 & Bug C)
     if account is None and not already_identified:
-        if _is_valid_full_name(name_val) and (_is_valid_email_input(email_val) or _is_valid_postal_code_input(postal_val)):
+        has_invalid_secondary = False
+        if email_val and not _is_valid_email_input(email_val):
+            has_invalid_secondary = True
+        if postal_val and not _is_valid_postal_code_input(postal_val):
+            has_invalid_secondary = True
+        if str(id_val or "").strip() and str(id_val).strip() != name_val:
+            if any(tok in str(id_val).lower() for tok in NEGATIVE_INPUT_TOKENS):
+                has_invalid_secondary = True
+
+        if _is_valid_full_name(name_val) and not has_invalid_secondary:
             import hashlib
             resolved_by_name = True
             resolved_by_email = _is_valid_email_input(email_val)
@@ -1664,7 +1674,7 @@ def lookup_account_impl(  # pragma: no cover
                 "first_name": first_name,
                 "status": "active",
                 "preferred_language": lang or "en-US",
-                "identifier_kind": "name_email_recovery",
+                "identifier_kind": "name_email_recovery" if _is_valid_email_input(email_val) else "name_recovery",
                 "email": contact_email,
                 "postal_code": service_pc,
                 "address": f"123 Maple Avenue, Montreal, QC {service_pc}",
@@ -2654,16 +2664,19 @@ def get_billing_summary_impl(  # pragma: no cover
     last_pmt_method = str(state.get("last_payment_method") or (posted_pmts[0].get("payment_method", "card") if posted_pmts else "card"))
 
     fx_unapp = get_fixture_fact(state, "fx_unapplied_payment")
+    has_unapp = False
+    unapp_dec = Decimal("0.00")
     if fx_unapp and str(fx_unapp).strip().lower() not in {"none", "0", "false"}:
         try:
-            last_pmt_dec = Decimal(str(fx_unapp))
-            last_pmt_amt_str = display_amount(last_pmt_dec)
-            last_pmt_date = "2026-10-28"
+            unapp_dec = Decimal(str(fx_unapp))
+            has_unapp = unapp_dec > Decimal("0.00")
         except Exception:
-            try:
-                last_pmt_dec = Decimal(str(last_pmt_amt_str))
-            except Exception:
-                last_pmt_dec = Decimal("0.00")
+            pass
+
+    if has_unapp:
+        last_pmt_dec = unapp_dec
+        last_pmt_amt_str = display_amount(unapp_dec)
+        last_pmt_date = "2026-10-28"
     else:
         try:
             last_pmt_dec = Decimal(str(last_pmt_amt_str))
@@ -2675,6 +2688,8 @@ def get_billing_summary_impl(  # pragma: no cover
     session_restored = bool(state.get("service_restored") and not is_susp)
     covers_past_due = (
         past_due_dec == Decimal("0.00")
+        or (has_unapp and unapp_dec >= past_due_dec)
+        or (last_pmt_dec >= past_due_dec and last_pmt_dec > Decimal("0.00") and not is_susp)
         or session_restored
         or pay_arr
     )
@@ -2692,15 +2707,15 @@ def get_billing_summary_impl(  # pragma: no cover
             lang,
             f"A payment of ${display_amount(last_pmt_dec)} posted on {last_pmt_date} covers the past-due balance. "
             "If the caller reports their service is suspended or not working after paying, "
-            "execute service restoration immediately via execute_suspend_restore(action='restore') "
+            "execute service restoration immediately via execute_suspend_restore(action='restore', caller_reported_payment=True) "
             "without troubleshooting or requiring another payment.",
             f"Un paiement de {display_amount(last_pmt_dec)} $ inscrit le {last_pmt_date} couvre le solde en souffrance. "
             "Si l'appelant signale que son service est suspendu ou ne fonctionne pas après avoir payé, "
-            "effectuez immédiatement le rétablissement du service via execute_suspend_restore(action='restore') "
+            "effectuez immédiatement le rétablissement du service via execute_suspend_restore(action='restore', caller_reported_payment=True) "
             "sans dépannage ni exiger d'autre paiement.",
             f"Un pago de ${display_amount(last_pmt_dec)} registrado el {last_pmt_date} cubre el saldo vencido. "
             "Si el cliente informa que su servicio está suspendido o no funciona después de pagar, "
-            "ejecute la restauración del servicio de inmediato a través de execute_suspend_restore(action='restore') "
+            "ejecute la restauración del servicio de inmediato a través de execute_suspend_restore(action='restore', caller_reported_payment=True) "
             "sin solucionar problemas ni exigir otro pago.",
         )
     elif is_susp:
@@ -2726,6 +2741,7 @@ def get_billing_summary_impl(  # pragma: no cover
         {
             "current_balance": display_amount(bal),
             "past_due_balance": display_amount(past_due),
+            "unapplied_payment": display_amount(unapp_dec) if has_unapp else "0.00",
             "due_date": "2026-11-05",
             "last_payment_amount": display_amount(last_pmt_dec),
             "last_payment_date": last_pmt_date,

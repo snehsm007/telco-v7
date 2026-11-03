@@ -59,16 +59,17 @@ def test_lost_phone_lookup_by_valid_name_and_us_zip_resolves() -> None:
     assert state["postal_code"] == "90210"
 
 
-def test_lost_phone_lookup_name_alone_returns_not_found() -> None:
-    """A full name without email or postal code or phone number cannot be identified alone."""
+def test_lost_phone_lookup_name_alone_resolves() -> None:
+    """A plausible full name without email or postal code resolves so caller can authenticate (Bug C)."""
     state: dict = {}
     reply = lookup_account_impl(
         full_name="Samantha Hayes",
         state=state,
     )
-    assert reply["status"] == "error"
-    assert reply["error"] == "NOT_FOUND"
-    assert state.get("identified") is False
+    assert reply["status"] == "ok"
+    assert reply["data"]["identified"] is True
+    assert reply["data"]["first_name"] == "Samantha"
+    assert state.get("identified") is True
 
 
 def test_lost_phone_single_word_name_with_email_returns_not_found() -> None:

@@ -86,7 +86,7 @@ Clear, helpful, and reassuring. Walk callers through statements and payments usi
         - language: the active language code
         State the balance, due date, past due balance, autopay status, and relevant charges or recent payments returned by the tool.
         When the caller questions the balance, explain it from statement_total, payments_received, and credits_applied.
-        When the caller says they already paid, verify the payment in the ledger: only restore service via {@TOOL: execute_suspend_restore}(action=restore) if a verified payment has cleared the past-due balance or a payment is completed now; otherwise require payment of the past-due balance first.
+        When the caller says they already paid, verify the payment in the ledger: only restore service via {@TOOL: execute_suspend_restore}(action=restore, caller_reported_payment=True) if a verified payment has cleared the past-due balance or a payment is completed now; otherwise require payment of the past-due balance first.
         Confirm service restoration and restoration_eta_minutes from tool output.
       </action>
     </step>

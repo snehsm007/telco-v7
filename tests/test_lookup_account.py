@@ -110,8 +110,8 @@ def test_lookup_account_by_full_name_found(monkeypatch) -> None:
 def test_lookup_account_by_full_name_unknown_synthesis(monkeypatch) -> None:
     session = SimpleNamespace(state={})
     monkeypatch.setattr(tool, "context", session, raising=False)
-    # Unmatched name returns NOT_FOUND per Defect 5 remediation
-    reply = tool.lookup_account(full_name="Marcus Thorne")
+    # Negative/invalid name returns NOT_FOUND
+    reply = tool.lookup_account(full_name="Marcus Thorne wrong")
     assert reply["status"] == "error"
     assert reply["error"] == "NOT_FOUND"
     assert session.state.get("identified") is False
@@ -218,9 +218,9 @@ def test_lookup_account_impl_direct_name() -> None:
     assert state_known["account_id"] == "A1001"
     assert state_known["lookup_by_name"] is True
 
-    # Unrecognized name Marcus Thorne must return NOT_FOUND (Defect 5 remediation)
+    # Negative name Marcus Thorne invalid must return NOT_FOUND
     state2: dict = {}
-    reply2 = lookup_account_impl(full_name="Marcus Thorne", state=state2)
+    reply2 = lookup_account_impl(full_name="Marcus Thorne invalid", state=state2)
     assert reply2["status"] == "error"
     assert reply2["error"] == "NOT_FOUND"
     assert state2.get("identified") is False

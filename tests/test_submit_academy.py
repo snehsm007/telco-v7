@@ -80,7 +80,7 @@ def test_resolve_agent_app_id_from_staging_mk(tmp_path: Path, monkeypatch):
   monkeypatch.delenv("APP", raising=False)
   mk = tmp_path / "staging.mk"
   mk.write_text("APP_ID := mk-app-id-999\nAGENT_NAME := foo\n")
-  assert submit_academy.resolve_agent_app_id(staging_mk_path=mk) == "projects/fde-bootcamp/locations/us/apps/mk-app-id-999"
+  assert submit_academy.resolve_agent_app_id(staging_mk_path=mk, last_push_path=tmp_path / "nonexistent.json") == "projects/fde-bootcamp/locations/us/apps/mk-app-id-999"
 
 
 def test_resolve_agent_app_id_dry_run_pending(tmp_path: Path, monkeypatch):

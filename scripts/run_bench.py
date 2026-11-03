@@ -108,7 +108,7 @@ RETRY_DELAYS_S = (15, 45, 90)
 POLL_INTERVAL_S = 30
 # A 20-eval x 5 run (100 conversations) has taken 38-46+ min. The ceiling only exists to
 # catch a run that never ends; a run that hit it is continued with --resume-run.
-RUN_TIMEOUT_S = 150 * 60
+RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "14400"))
 JUDGE_KEYS = (
     "all_expectations_satisfied",
     "task_completed",

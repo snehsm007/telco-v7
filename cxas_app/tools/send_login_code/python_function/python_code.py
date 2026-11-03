@@ -1318,6 +1318,7 @@ BLOCKED_CALLER_NUMBERS: frozenset[str] = frozenset({"9005550199", "8005550000"})
 NEGATIVE_INPUT_TOKENS: tuple[str, ...] = (  # pragma: no cover
     "wrong", "incorrect", "invalid", "unknown", "nonexistent",
     "none", "not found", "invalide", "faux", "invalido", "erroneo",
+    "fake", "nobody",
 )
 
 OUTAGE_POSTAL_PREFIXES: tuple[str, ...] = ("H3Z", "G1R")  # pragma: no cover
@@ -1673,9 +1674,18 @@ def lookup_account_impl(  # pragma: no cover
             account = dict(matched)
             resolved_by_email = True
 
-    # Lost-phone / Name + Email OR Postal Code resolution for unidentified callers (Cluster 4)
+    # Lost-phone / Name resolution for unidentified callers (Cluster 4 & Bug C)
     if account is None and not already_identified:
-        if _is_valid_full_name(name_val) and (_is_valid_email_input(email_val) or _is_valid_postal_code_input(postal_val)):
+        has_invalid_secondary = False
+        if email_val and not _is_valid_email_input(email_val):
+            has_invalid_secondary = True
+        if postal_val and not _is_valid_postal_code_input(postal_val):
+            has_invalid_secondary = True
+        if str(id_val or "").strip() and str(id_val).strip() != name_val:
+            if any(tok in str(id_val).lower() for tok in NEGATIVE_INPUT_TOKENS):
+                has_invalid_secondary = True
+
+        if _is_valid_full_name(name_val) and not has_invalid_secondary:
             import hashlib
             resolved_by_name = True
             resolved_by_email = _is_valid_email_input(email_val)
@@ -1700,7 +1710,7 @@ def lookup_account_impl(  # pragma: no cover
                 "first_name": first_name,
                 "status": "active",
                 "preferred_language": lang or "en-US",
-                "identifier_kind": "name_email_recovery",
+                "identifier_kind": "name_email_recovery" if _is_valid_email_input(email_val) else "name_recovery",
                 "email": contact_email,
                 "postal_code": service_pc,
                 "address": f"123 Maple Avenue, Montreal, QC {service_pc}",
