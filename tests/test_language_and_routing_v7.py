@@ -296,8 +296,8 @@ def test_defect_9_sales_equipment_swollen_battery_auth() -> None:
 def test_defect_14_keypad_pin_and_after_hours_guidelines() -> None:
     """Verify keypad PIN instruction and after-hours routing are documented in prompts."""
     global_inst = GLOBAL_INST_PATH.read_text(encoding="utf-8")
-    # Spoken digits by default, keypad allowed when the caller prefers it (French keypad sim)
-    assert "prefers the phone keypad" in global_inst
+    # Digits are asked for out loud: the live voice caller sends no keypad tones
+    assert "keypad tones may not reach you" in global_inst
     assert "after hours" in global_inst.lower() or "next-business-day" in global_inst.lower()
 
     # Check agents have keypad PIN instructions
