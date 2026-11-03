@@ -1,7 +1,9 @@
 from types import SimpleNamespace
+from typing import Any
 import pytest
 
 import cxas_app.tools.get_billing_summary.python_function.python_code as tool
+from lib.services import get_billing_summary_impl, lookup_account_impl
 
 
 def test_get_billing_summary_happy_path(monkeypatch) -> None:
@@ -236,6 +238,52 @@ def test_get_billing_summary_adjustments_and_restoration_hint_localized(
     data = res["data"]
     assert data["adjustments"][0]["description"] == expected_adj
     assert expected_hint_keyword in data["restoration_hint"]
+
+
+def test_billing_summary_consistency_between_name_and_phone_lookup() -> None:
+    """Assert lookup_account by full name and phone yield identical get_billing_summary results,
+
+    and in the suspended-line (restore) case the past-due amount is non-zero on both paths.
+    """
+    # 1. Active line default residential profile
+    state_phone: dict[str, Any] = {}
+    res_phone = lookup_account_impl(identifier="202-555-0143", state=state_phone)
+    assert res_phone["status"] == "ok"
+    state_phone["auth_status"] = "pass"
+    bill_phone = get_billing_summary_impl(state=state_phone)
+    assert bill_phone["status"] == "ok"
+
+    state_name: dict[str, Any] = {}
+    res_name = lookup_account_impl(full_name="Sam Richards", state=state_name)
+    assert res_name["status"] == "ok"
+    state_name["auth_status"] = "pass"
+    bill_name = get_billing_summary_impl(state=state_name)
+    assert bill_name["status"] == "ok"
+
+    # Both paths must yield identical billing summary results for default profile
+    assert bill_name["data"]["current_balance"] == bill_phone["data"]["current_balance"]
+    assert bill_name["data"]["past_due_balance"] == bill_phone["data"]["past_due_balance"]
+    assert bill_name["data"]["amount_due"] == bill_phone["data"]["amount_due"]
+
+    # 2. Suspended-line (restore) case: past-due amount must be non-zero on both paths
+    state_phone_susp: dict[str, Any] = {"fx_account_suspended": True}
+    res_phone_susp = lookup_account_impl(identifier="202-555-0143", state=state_phone_susp)
+    assert res_phone_susp["status"] == "ok"
+    state_phone_susp["auth_status"] = "pass"
+    bill_phone_susp = get_billing_summary_impl(state=state_phone_susp)
+    assert bill_phone_susp["status"] == "ok"
+
+    state_name_susp: dict[str, Any] = {"fx_account_suspended": True}
+    res_name_susp = lookup_account_impl(full_name="Sam Richards", state=state_name_susp)
+    assert res_name_susp["status"] == "ok"
+    state_name_susp["auth_status"] = "pass"
+    bill_name_susp = get_billing_summary_impl(state=state_name_susp)
+    assert bill_name_susp["status"] == "ok"
+
+    assert bill_name_susp["data"]["past_due_balance"] == bill_phone_susp["data"]["past_due_balance"]
+    assert bill_phone_susp["data"]["past_due_balance"] not in ("$0.00", "0.00", "$0", "0")
+    assert bill_name_susp["data"]["past_due_balance"] not in ("$0.00", "0.00", "$0", "0")
+
 
 
 

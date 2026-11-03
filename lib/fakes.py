@@ -41,6 +41,25 @@ BLOCKED_CALLER_NUMBERS: frozenset[str] = frozenset({"9005550199", "8005550000"})
 OUTAGE_POSTAL_PREFIXES: tuple[str, ...] = ("H3Z", "G1R")
 SALES_TAX_RATE: float = 0.15
 
+DEFAULT_RESIDENTIAL_PROFILE: dict[str, str] = {
+    "card_on_file_last4": "7742",
+    "secondary_card_last4": "8844",
+    "bank_on_file_last4": "6789",
+    "subscribed_lobs": "mobility,internet,tv,homephone",
+    "current_balance": "85.50",
+    "past_due_balance": "85.50",
+    "duplicate_payment_amount": "85.50",
+}
+
+
+def default_residential_profile(account: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Single source of truth for default residential account profile fields."""
+    prof = dict(DEFAULT_RESIDENTIAL_PROFILE)
+    if account is not None:
+        account.update(prof)
+        return account
+    return prof
+
 
 def normalize_code(value: Any) -> str:
     """Coerce ints, floats, and formatted strings into a clean digit string."""
@@ -176,21 +195,14 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
                     if record.get("first_name") == "Jordan"
                     else "taylor@example.com"
                 )
-            rec[_k_cf4] = "7742"
-            rec[_k_sc4] = "8844"
-            rec[_k_bf4] = "6789"
-            rec["subscribed_lobs"] = "mobility,internet,tv,homephone"
-            rec["current_balance"] = "85.50"
-            rec["past_due_balance"] = "85.50"
-            rec["duplicate_payment_amount"] = "85.50"
-            return rec
+            return default_residential_profile(rec)
 
     if is_synthetic_wrong_identifier(raw_str, norm_digits) or is_synthetic_wrong_identifier(raw_str, digits):
         return None
 
     if is_intl:
         last4 = digits[-4:]
-        return {
+        return default_residential_profile({
             "account_id": f"ACC-{last4}",
             "phone": digits,
             "linked_mobile_last4": last4,
@@ -203,18 +215,11 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
             "preferred_language": "en-US",
             "identifier_kind": "phone",
             "email": f"user{last4}@example.com",
-            _k_cf4: "7742",
-            _k_sc4: "8844",
-            _k_bf4: "6789",
-            "subscribed_lobs": "mobility,internet,tv,homephone",
-            "current_balance": "85.50",
-            "past_due_balance": "85.50",
-            "duplicate_payment_amount": "85.50",
-        }
+        })
 
     if not has_alpha and len(norm_digits) in (7, 8, 9, 10, 11, 12):
         if len(norm_digits) in (7, 10):
-            return {
+            return default_residential_profile({
                 "account_id": f"ACC-{norm_digits[-4:]}",
                 "phone": norm_digits,
                 "linked_mobile_last4": norm_digits[-4:],
@@ -227,15 +232,8 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
                 "preferred_language": "en-US",
                 "identifier_kind": "phone",
                 "email": synth_email,
-                _k_cf4: "7742",
-                _k_sc4: "8844",
-                _k_bf4: "6789",
-                "subscribed_lobs": "mobility,internet,tv,homephone",
-                "current_balance": "85.50",
-                "past_due_balance": "85.50",
-                "duplicate_payment_amount": "85.50",
-            }
-        return {
+            })
+        return default_residential_profile({
             "account_id": f"ACC-{norm_digits[-4:]}",
             "phone": norm_digits,
             "linked_mobile_last4": "",
@@ -248,14 +246,7 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
             "preferred_language": "en-US",
             "identifier_kind": "billing_account",
             "email": synth_email,
-            _k_cf4: "7742",
-            _k_sc4: "8844",
-            _k_bf4: "6789",
-            "subscribed_lobs": "mobility,internet,tv,homephone",
-            "current_balance": "85.50",
-            "past_due_balance": "85.50",
-            "duplicate_payment_amount": "85.50",
-        }
+        })
 
     if has_alpha and re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", raw):
         base = dict(ACCOUNTS[0])
@@ -268,14 +259,7 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
         base["identifier_kind"] = "account_id"
         base["first_name"] = synth_fn if synth_fn else base.get("first_name", "")
         base["email"] = f"{clean_fn.lower()}@example.com" if clean_fn else "user@example.com"
-        base[_k_cf4] = "7742"
-        base[_k_sc4] = "8844"
-        base[_k_bf4] = "6789"
-        base["subscribed_lobs"] = "mobility,internet,tv,homephone"
-        base["current_balance"] = "85.50"
-        base["past_due_balance"] = "85.50"
-        base["duplicate_payment_amount"] = "85.50"
-        return base
+        return default_residential_profile(base)
 
     return None
 

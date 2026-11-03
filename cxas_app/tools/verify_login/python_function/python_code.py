@@ -1405,6 +1405,24 @@ def _session_language(state: dict[str, Any] | None, language: Any = "") -> str: 
 
     return resolve_copy_locale(None)
 
+DEFAULT_RESIDENTIAL_PROFILE: dict[str, str] = {  # pragma: no cover
+    "card_on_file_last4": "7742",
+    "secondary_card_last4": "8844",
+    "bank_on_file_last4": "6789",
+    "subscribed_lobs": "mobility,internet,tv,homephone",
+    "current_balance": "85.50",
+    "past_due_balance": "85.50",
+    "duplicate_payment_amount": "85.50",
+}
+
+def default_residential_profile(account: dict[str, Any] | None = None) -> dict[str, Any]:  # pragma: no cover
+    """Single source of truth for default residential account profile fields."""
+    prof = dict(DEFAULT_RESIDENTIAL_PROFILE)
+    if account is not None:
+        account.update(prof)
+        return account
+    return prof
+
 def is_synthetic_wrong_identifier(raw_str: str, digits: str) -> bool:  # pragma: no cover
     """Return True when an identifier is intentionally invalid or synthetic wrong."""
     raw_low = raw_str.lower()
@@ -1488,21 +1506,14 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
                     if record.get("first_name") == "Jordan"
                     else "taylor@example.com"
                 )
-            rec[_k_cf4] = "7742"
-            rec[_k_sc4] = "8844"
-            rec[_k_bf4] = "6789"
-            rec["subscribed_lobs"] = "mobility,internet,tv,homephone"
-            rec["current_balance"] = "85.50"
-            rec["past_due_balance"] = "85.50"
-            rec["duplicate_payment_amount"] = "85.50"
-            return rec
+            return default_residential_profile(rec)
 
     if is_synthetic_wrong_identifier(raw_str, norm_digits) or is_synthetic_wrong_identifier(raw_str, digits):
         return None
 
     if is_intl:
         last4 = digits[-4:]
-        return {
+        return default_residential_profile({
             "account_id": f"ACC-{last4}",
             "phone": digits,
             "linked_mobile_last4": last4,
@@ -1515,18 +1526,11 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
             "preferred_language": "en-US",
             "identifier_kind": "phone",
             "email": f"user{last4}@example.com",
-            _k_cf4: "7742",
-            _k_sc4: "8844",
-            _k_bf4: "6789",
-            "subscribed_lobs": "mobility,internet,tv,homephone",
-            "current_balance": "85.50",
-            "past_due_balance": "85.50",
-            "duplicate_payment_amount": "85.50",
-        }
+        })
 
     if not has_alpha and len(norm_digits) in (7, 8, 9, 10, 11, 12):
         if len(norm_digits) in (7, 10):
-            return {
+            return default_residential_profile({
                 "account_id": f"ACC-{norm_digits[-4:]}",
                 "phone": norm_digits,
                 "linked_mobile_last4": norm_digits[-4:],
@@ -1539,15 +1543,8 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
                 "preferred_language": "en-US",
                 "identifier_kind": "phone",
                 "email": synth_email,
-                _k_cf4: "7742",
-                _k_sc4: "8844",
-                _k_bf4: "6789",
-                "subscribed_lobs": "mobility,internet,tv,homephone",
-                "current_balance": "85.50",
-                "past_due_balance": "85.50",
-                "duplicate_payment_amount": "85.50",
-            }
-        return {
+            })
+        return default_residential_profile({
             "account_id": f"ACC-{norm_digits[-4:]}",
             "phone": norm_digits,
             "linked_mobile_last4": "",
@@ -1560,14 +1557,7 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
             "preferred_language": "en-US",
             "identifier_kind": "billing_account",
             "email": synth_email,
-            _k_cf4: "7742",
-            _k_sc4: "8844",
-            _k_bf4: "6789",
-            "subscribed_lobs": "mobility,internet,tv,homephone",
-            "current_balance": "85.50",
-            "past_due_balance": "85.50",
-            "duplicate_payment_amount": "85.50",
-        }
+        })
 
     if has_alpha and re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", raw):
         base = dict(ACCOUNTS[0])
@@ -1580,14 +1570,7 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
         base["identifier_kind"] = "account_id"
         base["first_name"] = synth_fn if synth_fn else base.get("first_name", "")
         base["email"] = f"{clean_fn.lower()}@example.com" if clean_fn else "user@example.com"
-        base[_k_cf4] = "7742"
-        base[_k_sc4] = "8844"
-        base[_k_bf4] = "6789"
-        base["subscribed_lobs"] = "mobility,internet,tv,homephone"
-        base["current_balance"] = "85.50"
-        base["past_due_balance"] = "85.50"
-        base["duplicate_payment_amount"] = "85.50"
-        return base
+        return default_residential_profile(base)
 
     return None
 
@@ -2020,7 +2003,7 @@ def lookup_account_impl(  # pragma: no cover
             contact_email = email_val if _is_valid_email_input(email_val) else f"{first_name.lower()}@example.com"
             service_pc = postal_val.strip().upper() if _is_valid_postal_code_input(postal_val) else "H3Z 2Y7"
 
-            account = {
+            account = default_residential_profile({
                 "account_id": synth_acc_id,
                 "billing_account": f"BA-9{acc_digits}1",
                 "phone": "",
@@ -2033,14 +2016,7 @@ def lookup_account_impl(  # pragma: no cover
                 "email": contact_email,
                 "postal_code": service_pc,
                 "address": f"123 Maple Avenue, Montreal, QC {service_pc}",
-                "card_on_file_last4": "7742",
-                "secondary_card_last4": "8844",
-                "bank_on_file_last4": "6789",
-                "subscribed_lobs": "mobility,internet,tv,homephone",
-                "current_balance": "0.00",
-                "past_due_balance": "0.00",
-                "duplicate_payment_amount": "0.00",
-            }
+            })
 
     if account is None:
         state["identified"] = False

@@ -34,6 +34,8 @@ from lib.fakes import (
     FAKE_WARRANTY_DATA,
     OUTAGE_POSTAL_PREFIXES,
     SALES_TAX_RATE,
+    DEFAULT_RESIDENTIAL_PROFILE,
+    default_residential_profile,
     VALID_LOGIN_CODES,
     VALID_OTPS,
     VALID_PINS,
@@ -1115,7 +1117,7 @@ def lookup_account_impl(
             contact_email = email_val if _is_valid_email_input(email_val) else f"{first_name.lower()}@example.com"
             service_pc = postal_val.strip().upper() if _is_valid_postal_code_input(postal_val) else "H3Z 2Y7"
 
-            account = {
+            account = default_residential_profile({
                 "account_id": synth_acc_id,
                 "billing_account": f"BA-9{acc_digits}1",
                 "phone": "",
@@ -1128,14 +1130,7 @@ def lookup_account_impl(
                 "email": contact_email,
                 "postal_code": service_pc,
                 "address": f"123 Maple Avenue, Montreal, QC {service_pc}",
-                "card_on_file_last4": "7742",
-                "secondary_card_last4": "8844",
-                "bank_on_file_last4": "6789",
-                "subscribed_lobs": "mobility,internet,tv,homephone",
-                "current_balance": "0.00",
-                "past_due_balance": "0.00",
-                "duplicate_payment_amount": "0.00",
-            }
+            })
 
     if account is None:
         state["identified"] = False
