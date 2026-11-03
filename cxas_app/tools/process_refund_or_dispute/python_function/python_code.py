@@ -1914,13 +1914,12 @@ def lookup_account_impl(  # pragma: no cover
     }
     if email_val:
         reply_data["email"] = email_val
-    if not state["phone_last4"]:
-        reply_data["agent_action"] = localized_text(
-            lang,
-            "Ask which mobile number should receive the verification code, or offer authentication with the account PIN.",
-            "Demander à quel numéro de mobile envoyer le code de vérification, ou proposer l'authentification avec le NIP du compte.",
-            "Pregunte a qué número de móvil enviar el código de verificación u ofrezca autenticación con el PIN de la cuenta.",
-        )
+    reply_data["agent_action"] = localized_text(
+        lang,
+        "Call send_login_code(channel='sms') to send a verification code to the mobile on file, or offer authentication with the account PIN.",
+        "Appeler send_login_code(channel='sms') pour envoyer un code de vérification au mobile au dossier, ou proposer l'authentification avec le NIP du compte.",
+        "Llame a send_login_code(channel='sms') para enviar un código de verificación al móvil registrado, u ofrezca autenticación con el PIN de la cuenta.",
+    )
     return _service_ok_reply(
         reply_data,
         reference,
