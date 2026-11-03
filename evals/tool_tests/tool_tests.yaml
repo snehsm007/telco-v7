@@ -39,6 +39,7 @@ tests:
       account_id: A1001
       auth_status: code_sent
       auth_failure_count: 0
+      fx_otp_on_file: "123456"
     expected_status: error
     expected_error: WRONG_CODE
     expected_state:

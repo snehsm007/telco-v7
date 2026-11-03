@@ -40,10 +40,10 @@ def test_always_wrong_codes_strictly_rejected() -> None:
         assert secret_pin_accepted(wrong, attempts=1) is False
 
     # Even with an explicit override, ALWAYS_WRONG codes must never be accepted
-    state = {"fx_pin_on_file": "9999"}
+    state = {"fx_pin_on_file": "0000"}
     with fixture_state_scope(state):
-        assert login_code_accepted("9999", attempts=0, state=state) is False
-        assert secret_pin_accepted("9999", attempts=0, state=state) is False
+        assert login_code_accepted("0000", attempts=0, state=state) is False
+        assert secret_pin_accepted("0000", attempts=0, state=state) is False
 
 
 def test_three_strike_lockout_ladder() -> None:
@@ -164,6 +164,7 @@ def test_verify_login_impl_end_to_end_auth_retry_and_lockout() -> None:
         "account_id": "ACC-1002",
         "phone_last4": "0198",
         "identified": True,
+        "fx_pin_on_file": "4321",
     }
     # Strike 1
     r1 = verify_login_impl(code="9999", state=state3)

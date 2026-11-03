@@ -32,7 +32,7 @@ def test_manage_mfa_settings_placeholder_code_returns_code_not_received(monkeypa
 
 
 def test_manage_mfa_settings_wrong_code_and_lockout(monkeypatch) -> None:
-    session = SimpleNamespace(state={"auth_status": "none", "auth_failure_count": 0})
+    session = SimpleNamespace(state={"auth_status": "none", "auth_failure_count": 0, "fx_pin_on_file": "4321"})
     monkeypatch.setattr(tool, "context", session, raising=False)
 
     r1 = tool.manage_mfa_settings(verification_code="9999")

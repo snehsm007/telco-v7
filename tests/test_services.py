@@ -178,7 +178,7 @@ def test_verify_login_direct_and_invalid_inputs() -> None:
 
 # Kills MUTATION 3 and MUTATION 5
 def test_wrong_codes_are_counted_until_login_is_refused() -> None:
-    state: dict[str, Any] = {}
+    state: dict[str, Any] = {"fx_otp_on_file": "123456"}
     lookup_account_impl(identifier=KNOWN_PHONE, state=state)
     send_login_code_impl(state=state)
 
@@ -208,7 +208,7 @@ def test_wrong_codes_are_counted_until_login_is_refused() -> None:
 
 # Tests lenient retry contract on Attempt 2 and lockout on Attempt 3
 def test_lenient_retry_on_second_try_and_lockout_on_third() -> None:
-    state: dict[str, Any] = {"account_id": "A1001"}
+    state: dict[str, Any] = {"account_id": "A1001", "fx_pin_on_file": "4321"}
     # Attempt 1 wrong code
     assert verify_login_impl(code="9999", state=state)["error"] == "WRONG_CODE"
     assert state["auth_failure_count"] == 1
@@ -219,7 +219,7 @@ def test_lenient_retry_on_second_try_and_lockout_on_third() -> None:
 
 
 def test_lockout_after_three_wrong_attempts() -> None:
-    state: dict[str, Any] = {"account_id": "A1001"}
+    state: dict[str, Any] = {"account_id": "A1001", "fx_pin_on_file": "4321"}
     assert verify_login_impl(code="9999", state=state)["error"] == "WRONG_CODE"
     assert verify_login_impl(code="9999", state=state)["error"] == "WRONG_CODE"
     last = verify_login_impl(code="123456", state=state)

@@ -200,7 +200,7 @@ def test_defect_3_restore_with_verified_ledger_payment_succeeds():
 # ============================================================================
 
 def test_defect_4_lockout_persists_across_account_switches():
-    state = {}
+    state = {"fx_otp_on_file": "123456"}
     # Lookup account 1
     lookup_account_impl(identifier="2025550143", state=state)
     acc1 = state["account_id"]
@@ -715,7 +715,7 @@ def test_coverage_manage_warranty_claim_standard():
 
 
 def test_coverage_verify_login_branches():
-    s = {}
+    s = {"fx_otp_on_file": "123456"}
     lookup_account_impl(identifier="2025550143", state=s)
     send_login_code_impl(channel="email", state=s)
 
@@ -877,7 +877,7 @@ def test_coverage_submit_request_and_payment_records():
 
 
 def test_coverage_mfa_lost_authenticator_and_step_up():
-    s = {"auth_status": "pass", "account_id": "A1001"}
+    s = {"auth_status": "pass", "account_id": "A1001", "fx_otp_on_file": "123456"}
     # Trigger lost authenticator step-up email
     r1 = manage_mfa_settings_impl(action="disable", lost_authenticator=True, state=s)
     assert r1["status"] == "ok"

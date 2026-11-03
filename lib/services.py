@@ -4664,7 +4664,9 @@ def manage_mfa_settings_impl(
             )
         digits = normalize_code(code_val)
         failures = read_count(state, "auth_failure_count")
-        if not login_code_accepted(digits, attempts=failures, max_attempts=MAX_LOGIN_ATTEMPTS):
+        with fixture_state_scope(state):
+            accepted = login_code_accepted(digits, attempts=failures, max_attempts=MAX_LOGIN_ATTEMPTS, state=state)
+        if not accepted:
             failures = read_count(state, "auth_failure_count") + 1
             state["auth_failure_count"] = failures
             if failures >= MAX_LOGIN_ATTEMPTS:

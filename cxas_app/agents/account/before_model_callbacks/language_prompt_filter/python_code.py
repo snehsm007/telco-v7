@@ -848,6 +848,18 @@ _FRENCH_MARKERS = frozenset(  # pragma: no cover
         "problème",
         "connexion",
         "fonctionne",
+        "quelqu'un",
+        "quelqu",
+        "quelquun",
+        "piraté",
+        "pirate",
+        "volé",
+        "fraude",
+        "peur",
+        "carte",
+        "ligne",
+        "changer",
+        "payer",
     }
 )
 

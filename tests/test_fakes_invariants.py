@@ -17,7 +17,7 @@ def test_fakes_constants_and_spoken_lines_invariants() -> None:
     for key in ("greeting", "code_sent", "handover"):
         assert set(SPOKEN_LINES[key]) == {"en-US", "fr-CA", "es-US"}
         assert all(len(line) > 40 for line in SPOKEN_LINES[key].values())
-    assert {"0000", "000000", "1111", "111111", "9999", "999999"} <= ALWAYS_WRONG_LOGIN_CODES
+    assert {"0000", "000000"} <= ALWAYS_WRONG_LOGIN_CODES
     assert VALID_OTPS and VALID_PINS and VALID_LOGIN_CODES == (VALID_OTPS | VALID_PINS)
     assert not ALWAYS_WRONG_LOGIN_CODES & VALID_LOGIN_CODES  # DESIGN_RULES rule 23
     assert {"0000", "9999"} <= DECLINED_CARD_LAST4

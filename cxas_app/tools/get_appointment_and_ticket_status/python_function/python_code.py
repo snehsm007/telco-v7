@@ -44,6 +44,212 @@ import hashlib
 import re
 import sys
 
+def resolve_locale(language: str | None) -> str:  # pragma: no cover
+    """Normalize a language tag, name, or code into a canonical BCP-47 locale."""
+    raw = str(language or "").strip()
+    if not raw:
+        return "en-US"
+    low = raw.lower().replace("_", "-")
+    if low in ("primary",) or low.startswith(("en", "english", "anglais")):
+        return "en-US"
+    if low in ("secondary",) or low.startswith(("fr", "french", "francais", "français")):
+        return "fr-CA"
+    if low.startswith(("es", "spanish", "espanol", "español")):
+        return "es-US"
+    if low.startswith(("pt", "portug")):
+        return "pt-BR"
+    if low.startswith(("de", "german", "deutsch")):
+        return "de-DE"
+    if low.startswith(("it", "ital")):
+        return "it-IT"
+    if low.startswith(("zh", "chin", "mandarin")):
+        return "zh-CN"
+    if low.startswith(("hi", "hindi")):
+        return "hi-IN"
+    if low.startswith(("ar", "arab")):
+        return "ar-XA"
+    if low.startswith(("ja", "japan")):
+        return "ja-JP"
+    if low.startswith(("ko", "korean")):
+        return "ko-KR"
+    m = re.match(r"^([a-zA-Z]{2,3})-([a-zA-Z0-9]{2,4})$", raw)
+    if m:
+        return f"{m.group(1).lower()}-{m.group(2).upper()}"
+    return "en-US"
+
+SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
+    "greeting": {
+        "en-US": "Hello, thanks for calling. Which phone number or account number can I look up for you?",
+        "fr-CA": "Bonjour, merci de votre appel. Quel numéro de téléphone ou numéro de compte puis-je rechercher pour vous?",
+        "es-US": "Hola, gracias por su llamada. ¿Qué número de teléfono o número de cuenta puedo buscar para usted?",
+    },
+    "code_sent": {
+        "en-US": "I've sent a login code to the phone number ending in [destination_last4]. Please read it to me when it arrives.",
+        "fr-CA": "J'ai envoyé un code de connexion au numéro se terminant par [destination_last4]. Lisez-le-moi dès que vous le recevez.",
+        "es-US": "Envié un código de acceso al número que termina en [destination_last4]. Léamelo cuando lo reciba.",
+    },
+    "handover": {
+        "en-US": "I'm transferring you to a member of our team now. Thank you for your patience.",
+        "fr-CA": "Je vous transfère maintenant à un membre de notre équipe. Merci de votre patience.",
+        "es-US": "Le transfiero ahora con un miembro de nuestro equipo. Gracias por su paciencia.",
+    },
+    "greeting_main": {
+        "en-US": "Welcome to Telco. I can help with billing, technical support, or managing your account. To get started, could you tell me the phone number or account number associated with your service?",
+        "fr-CA": "Bienvenue chez Telco. Je peux vous aider avec la facturation, le soutien technique ou la gestion de votre compte. Pour commencer, pourriez-vous m'indiquer le numéro de téléphone ou le numéro de compte associé à votre service?",
+        "es-US": "Bienvenido a Telco. Puedo ayudarle con facturación, soporte técnico o la gestión de su cuenta. Para comenzar, ¿podría indicarme el número de teléfono o el número de cuenta asociado a su servicio?",
+    },
+    "recording_notice": {
+        "en-US": "This call may be recorded for quality and training purposes.",
+        "fr-CA": "Cet appel peut être enregistré à des fins de qualité et de formation.",
+        "es-US": "Esta llamada puede ser grabada con fines de calidad y capacitación.",
+    },
+    "id_verification_otp": {
+        "en-US": "For your security, I just sent a 6-digit code to that number — please read it back to me.",
+        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code à 6 chiffres à ce numéro — veuillez me le lire.",
+        "es-US": "Por su seguridad, acabo de enviar un código de 6 dígitos a ese número; por favor léamelo.",
+    },
+    "id_verification_email_otp": {
+        "en-US": "For your security, I just sent a 6-digit verification code to your backup email address on file — please read it back to me.",
+        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code de vérification à 6 chiffres à votre adresse courriel de secours au dossier — veuillez me le lire.",
+        "es-US": "Por su seguridad, acabo de enviar un código de verificación de 6 dígitos a su correo electrónico de respaldo registrado; por favor léamelo.",
+    },
+    "id_verification_pin": {
+        "en-US": "For your security, I'll need to verify your identity. Please enter the 4-digit PIN you set up.",
+        "fr-CA": "Pour votre sécurité, je dois vérifier votre identité. Veuillez composer le NIP à 4 chiffres que vous avez configuré.",
+        "es-US": "Por su seguridad, necesito verificar su identidad. Por favor ingrese el PIN de 4 dígitos que configuró.",
+    },
+    "live_agent_handoff": {
+        "en-US": "I'll connect you to a representative who can help. Please hold.",
+        "fr-CA": "Je vais vous mettre en communication avec un représentant qui pourra vous aider. Veuillez patienter.",
+        "es-US": "Le comunicaré con un representante que pueda ayudarle. Por favor espere.",
+    },
+    "business_handoff": {
+        "en-US": "To get you the best support for your business account, I'll transfer you to an agent. You'll need to use your phone keypad instead of talking to the virtual assistant. Just a moment while I connect you.",
+        "fr-CA": "Pour vous offrir le meilleur soutien pour votre compte affaires, je vais vous transférer à un agent. Vous devrez utiliser le clavier de votre téléphone plutôt que de parler à l'assistant virtuel. Un instant pendant que je vous transfère.",
+        "es-US": "Para brindarle la mejor asistencia con su cuenta comercial, le transferiré con un agente. Deberá usar el teclado de su teléfono en lugar de hablar con el asistente virtual. Un momento mientras le comunico.",
+    },
+    "payment_method_preamble": {
+        "en-US": "For your security, please do not read your full card number or security code out loud; we only confirm the last four digits on file.",
+        "fr-CA": "Pour votre sécurité, veuillez ne pas lire votre numéro de carte complet ni votre code de sécurité à haute voix; nous confirmons uniquement les quatre derniers chiffres au dossier.",
+        "es-US": "Por su seguridad, no lea en voz alta el número completo de su tarjeta ni el código de seguridad; solo confirmamos los últimos cuatro dígitos registrados.",
+    },
+    "contract_cancellation_fee_disclosure": {
+        "en-US": "Please note that cancelling or transferring your line ends any active term agreement, and any applicable early cancellation fee and prorated charges from your account terms will appear on your final statement.",
+        "fr-CA": "Veuillez noter que l'annulation ou le transfert de votre ligne met fin à toute entente active, et que les frais de résiliation anticipée applicables ainsi que le solde calculé au prorata figureront sur votre dernière facture.",
+        "es-US": "Tenga en cuenta que cancelar o transferir su línea finaliza cualquier contrato vigente, y cualquier cargo aplicable por cancelación anticipada y cargos prorrateados aparecerán en su estado de cuenta final.",
+    },
+    "refund_confirmation_pattern": {
+        "en-US": "Your refund of $[amount] will appear on your next statement within [days] business days.",
+        "fr-CA": "Votre remboursement de [amount] $ figurera sur votre prochain relevé d'ici [days] jours ouvrables.",
+        "es-US": "Su reembolso de $[amount] aparecerá en su próximo estado de cuenta dentro de [days] días hábiles.",
+    },
+    "confirmation_number_line": {
+        "en-US": "Your confirmation number is [ref].",
+        "fr-CA": "Votre numéro de confirmation est le [ref].",
+        "es-US": "Su número de confirmación es [ref].",
+    },
+    "empathy_protocol": {
+        "en-US": "I'm very sorry to hear that you are facing challenges. I will ensure we handle your request with the utmost care.",
+        "fr-CA": "Je suis vraiment désolé d'apprendre que vous rencontrez ces difficultés. Je veillerai à ce que nous traitions votre demande avec le plus grand soin.",
+        "es-US": "Lamento mucho saber que está pasando por dificultades. Me aseguraré de que atendamos su solicitud con el mayor cuidado.",
+    },
+    "outage_active": {
+        "en-US": "I see there's an active outage in your area. We're working on it. Would you like me to text you when it's restored?",
+        "fr-CA": "Je constate qu'une panne est en cours dans votre secteur. Nous travaillons à la résoudre. Voulez-vous que je vous envoie un texto dès que le service sera rétabli?",
+        "es-US": "Veo que hay una interrupción activa en su área. Estamos trabajando para resolverla. ¿Desea que le envíe un mensaje de texto cuando se restablezca el servicio?",
+    },
+    "outage_none_offer_sms": {
+        "en-US": "There's no outage reported in your area. I can text step-by-step troubleshooting steps to your mobile — would you like that?",
+        "fr-CA": "Aucune panne n'est signalée dans votre secteur. Je peux vous envoyer les étapes de dépannage par texto sur votre mobile — le souhaitez-vous?",
+        "es-US": "No se reporta ninguna interrupción en su área. Puedo enviarle los pasos de resolución de problemas por mensaje de texto a su móvil — ¿le gustaría eso?",
+    },
+    "transfer_to_specialist": {
+        "en-US": "I'll connect you to a billing specialist now — they'll have everything we've already discussed.",
+        "fr-CA": "Je vous mets maintenant en communication avec un spécialiste de la facturation — il aura déjà tout ce dont nous avons discuté.",
+        "es-US": "Le comunicaré ahora con un especialista de facturación; tendrá toda la información que ya conversamos.",
+    },
+    "service_alert_banner": {
+        "en-US": "Please note: there is an active regional service advisory in parts of Montreal today.",
+        "fr-CA": "Veuillez noter qu'un avis de service régional est actuellement en vigueur dans certains secteurs de Montréal.",
+        "es-US": "Tenga en cuenta que hoy hay un aviso de servicio regional activo en partes de Montreal.",
+    },
+    "blocked_caller_deflection": {
+        "en-US": "We're unable to complete this call from your current number. Please visit telco.example.com/support for assistance. Goodbye.",
+        "fr-CA": "Nous ne sommes pas en mesure de traiter cet appel à partir de ce numéro. Veuillez consulter telco.example.com/support pour obtenir de l'aide. Au revoir.",
+        "es-US": "No podemos completar esta llamada desde este número. Visite telco.example.com/support para recibir asistencia. Hasta luego.",
+    },
+    "malicious_closing": {
+        "en-US": "I'm only able to assist with Telco telecommunications services and account requests. Thank you for calling, goodbye.",
+        "fr-CA": "Je peux uniquement vous aider avec les services de télécommunications et les demandes de compte Telco. Merci de votre appel, au revoir.",
+        "es-US": "Solo puedo ayudarle con servicios de telecomunicaciones y solicitudes de cuenta de Telco. Gracias por llamar, hasta luego.",
+    },
+}
+
+def resolve_copy_locale(language: str | None) -> str:  # pragma: no cover
+    """Pick one of the three primary supported copy locales."""
+    loc = resolve_locale(language)
+    if loc == "fr-CA":
+        return "fr-CA"
+    if loc == "es-US":
+        return "es-US"
+    return "en-US"
+
+def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots: object) -> str:  # pragma: no cover
+    """Return the spoken template for key and language, formatting all placeholders."""
+    locale = resolve_copy_locale(language)
+    table = SPOKEN_LINES.get(key, {})
+    template = table.get(locale) or table.get("en-US") or ""
+    if args and "ref" not in slots:
+        slots["ref"] = args[0]
+        slots["confirmation_number"] = args[0]
+    for slot_name, slot_val in slots.items():
+        if isinstance(slot_val, float) and slot_val.is_integer():
+            val_str = str(int(slot_val))
+        elif slot_name == "days" and isinstance(slot_val, (int, float, str)):
+            try:
+                val_str = str(int(float(slot_val)))
+            except (ValueError, TypeError):
+                val_str = str(slot_val)
+        else:
+            val_str = str(slot_val)
+        template = template.replace(f"[{slot_name}]", val_str).replace(f"{{{slot_name}}}", val_str)
+        if slot_name in ("ref", "confirmation_number"):
+            template = template.replace("[ref]", val_str).replace("{ref}", val_str)
+            template = template.replace("[confirmation_number]", val_str).replace("{confirmation_number}", val_str)
+    return template
+
+def _call_live_backend(  # pragma: no cover
+    tool_name: str,
+    state: dict[str, Any],
+    lang: str,
+    reference: str,
+) -> dict[str, Any]:
+    """Return PRD Section 6 system error envelope when mock_mode is explicitly disabled."""
+    if tool_name in {"lookup_account", "send_login_code", "verify_login"}:
+        err_code = "AUTH_SERVICE_UNAVAILABLE"
+    else:
+        err_code = "SYSTEM_DOWN"
+
+    handoff_msg = spoken_line("live_agent_handoff", lang)
+    loc = resolve_locale(lang) if "resolve_locale" in globals() else lang
+    return {
+        "status": "error",
+        "error": err_code,
+        "error_message": f"Live telecom CRM backend connection unavailable for {tool_name}.",
+        "agent_action": "ESCALATE_SYSTEM_UNAVAILABLE",
+        "tracking_id": reference,
+        "active_language": loc,
+        "data": {
+            "error_category": "SYSTEM",
+            "must_escalate_immediately": True,
+            "escalation_reason": "system_unavailable",
+            "handoff_message": handoff_msg,
+            "mock_mode": False,
+        },
+        "must_escalate_immediately": True,
+        "handoff_message": handoff_msg,
+    }
+
 ERROR_CODES: tuple[str, ...] = (  # pragma: no cover
     "INVALID_INPUT",
     "NOT_FOUND",
@@ -607,48 +813,6 @@ LOCALIZED_ERROR_DEFAULTS: dict[str, dict[str, tuple[str, str]]] = {  # pragma: n
     },
 }
 
-def resolve_locale(language: str | None) -> str:  # pragma: no cover
-    """Normalize a language tag, name, or code into a canonical BCP-47 locale."""
-    raw = str(language or "").strip()
-    if not raw:
-        return "en-US"
-    low = raw.lower().replace("_", "-")
-    if low in ("primary",) or low.startswith(("en", "english", "anglais")):
-        return "en-US"
-    if low in ("secondary",) or low.startswith(("fr", "french", "francais", "français")):
-        return "fr-CA"
-    if low.startswith(("es", "spanish", "espanol", "español")):
-        return "es-US"
-    if low.startswith(("pt", "portug")):
-        return "pt-BR"
-    if low.startswith(("de", "german", "deutsch")):
-        return "de-DE"
-    if low.startswith(("it", "ital")):
-        return "it-IT"
-    if low.startswith(("zh", "chin", "mandarin")):
-        return "zh-CN"
-    if low.startswith(("hi", "hindi")):
-        return "hi-IN"
-    if low.startswith(("ar", "arab")):
-        return "ar-XA"
-    if low.startswith(("ja", "japan")):
-        return "ja-JP"
-    if low.startswith(("ko", "korean")):
-        return "ko-KR"
-    m = re.match(r"^([a-zA-Z]{2,3})-([a-zA-Z0-9]{2,4})$", raw)
-    if m:
-        return f"{m.group(1).lower()}-{m.group(2).upper()}"
-    return "en-US"
-
-def resolve_copy_locale(language: str | None) -> str:  # pragma: no cover
-    """Pick one of the three primary supported copy locales."""
-    loc = resolve_locale(language)
-    if loc == "fr-CA":
-        return "fr-CA"
-    if loc == "es-US":
-        return "es-US"
-    return "en-US"
-
 def tracking_id(prefix: str, *parts: object) -> str:  # pragma: no cover
     """Return a deterministic short reference number (R followed by 6 digits)."""
     raw = "|".join([prefix, *(str(value).strip().lower() for value in parts)])
@@ -714,158 +878,25 @@ _ACTIVE_FIXTURE_STATE: contextvars.ContextVar[dict[str, Any] | None] = (  # prag
 )
 
 def get_fixture_fact(  # pragma: no cover
-    state: dict[str, Any] | None,
-    fact_name: str,
+    state: Any = None,
+    fact_name: str = "",
     default: Any = None,
 ) -> Any:
     """Retrieve a backend fixture fact from session state (checking fx_* and canonical variables),
 
     falling back to realistic defaults. Treats None and "" as unset.
     """
-    eff = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
-    if not isinstance(eff, dict) or not fact_name:
+    eff = state if callable(getattr(state, "get", None)) else _ACTIVE_FIXTURE_STATE.get()
+    if not callable(getattr(eff, "get", None)) or not fact_name:
         return default
 
     base = fact_name[3:] if fact_name.startswith("fx_") else fact_name
     candidates = (f"fx_{base}", fact_name, base)
     for k in candidates:
-        if k in eff:
-            val = eff.get(k)
-            if val is not None and val != "":
-                return val
+        val = eff.get(k)
+        if val is not None and val != "":
+            return val
     return default
-
-SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
-    "greeting": {
-        "en-US": "Hello, thanks for calling. Which phone number or account number can I look up for you?",
-        "fr-CA": "Bonjour, merci de votre appel. Quel numéro de téléphone ou numéro de compte puis-je rechercher pour vous?",
-        "es-US": "Hola, gracias por su llamada. ¿Qué número de teléfono o número de cuenta puedo buscar para usted?",
-    },
-    "code_sent": {
-        "en-US": "I've sent a login code to the phone number ending in [destination_last4]. Please read it to me when it arrives.",
-        "fr-CA": "J'ai envoyé un code de connexion au numéro se terminant par [destination_last4]. Lisez-le-moi dès que vous le recevez.",
-        "es-US": "Envié un código de acceso al número que termina en [destination_last4]. Léamelo cuando lo reciba.",
-    },
-    "handover": {
-        "en-US": "I'm transferring you to a member of our team now. Thank you for your patience.",
-        "fr-CA": "Je vous transfère maintenant à un membre de notre équipe. Merci de votre patience.",
-        "es-US": "Le transfiero ahora con un miembro de nuestro equipo. Gracias por su paciencia.",
-    },
-    "greeting_main": {
-        "en-US": "Welcome to Telco. I can help with billing, technical support, or managing your account. To get started, could you tell me the phone number or account number associated with your service?",
-        "fr-CA": "Bienvenue chez Telco. Je peux vous aider avec la facturation, le soutien technique ou la gestion de votre compte. Pour commencer, pourriez-vous m'indiquer le numéro de téléphone ou le numéro de compte associé à votre service?",
-        "es-US": "Bienvenido a Telco. Puedo ayudarle con facturación, soporte técnico o la gestión de su cuenta. Para comenzar, ¿podría indicarme el número de teléfono o el número de cuenta asociado a su servicio?",
-    },
-    "recording_notice": {
-        "en-US": "This call may be recorded for quality and training purposes.",
-        "fr-CA": "Cet appel peut être enregistré à des fins de qualité et de formation.",
-        "es-US": "Esta llamada puede ser grabada con fines de calidad y capacitación.",
-    },
-    "id_verification_otp": {
-        "en-US": "For your security, I just sent a 6-digit code to that number — please read it back to me.",
-        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code à 6 chiffres à ce numéro — veuillez me le lire.",
-        "es-US": "Por su seguridad, acabo de enviar un código de 6 dígitos a ese número; por favor léamelo.",
-    },
-    "id_verification_email_otp": {
-        "en-US": "For your security, I just sent a 6-digit verification code to your backup email address on file — please read it back to me.",
-        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code de vérification à 6 chiffres à votre adresse courriel de secours au dossier — veuillez me le lire.",
-        "es-US": "Por su seguridad, acabo de enviar un código de verificación de 6 dígitos a su correo electrónico de respaldo registrado; por favor léamelo.",
-    },
-    "id_verification_pin": {
-        "en-US": "For your security, I'll need to verify your identity. Please enter the 4-digit PIN you set up.",
-        "fr-CA": "Pour votre sécurité, je dois vérifier votre identité. Veuillez composer le NIP à 4 chiffres que vous avez configuré.",
-        "es-US": "Por su seguridad, necesito verificar su identidad. Por favor ingrese el PIN de 4 dígitos que configuró.",
-    },
-    "live_agent_handoff": {
-        "en-US": "I'll connect you to a representative who can help. Please hold.",
-        "fr-CA": "Je vais vous mettre en communication avec un représentant qui pourra vous aider. Veuillez patienter.",
-        "es-US": "Le comunicaré con un representante que pueda ayudarle. Por favor espere.",
-    },
-    "business_handoff": {
-        "en-US": "To get you the best support for your business account, I'll transfer you to an agent. You'll need to use your phone keypad instead of talking to the virtual assistant. Just a moment while I connect you.",
-        "fr-CA": "Pour vous offrir le meilleur soutien pour votre compte affaires, je vais vous transférer à un agent. Vous devrez utiliser le clavier de votre téléphone plutôt que de parler à l'assistant virtuel. Un instant pendant que je vous transfère.",
-        "es-US": "Para brindarle la mejor asistencia con su cuenta comercial, le transferiré con un agente. Deberá usar el teclado de su teléfono en lugar de hablar con el asistente virtual. Un momento mientras le comunico.",
-    },
-    "payment_method_preamble": {
-        "en-US": "For your security, please do not read your full card number or security code out loud; we only confirm the last four digits on file.",
-        "fr-CA": "Pour votre sécurité, veuillez ne pas lire votre numéro de carte complet ni votre code de sécurité à haute voix; nous confirmons uniquement les quatre derniers chiffres au dossier.",
-        "es-US": "Por su seguridad, no lea en voz alta el número completo de su tarjeta ni el código de seguridad; solo confirmamos los últimos cuatro dígitos registrados.",
-    },
-    "contract_cancellation_fee_disclosure": {
-        "en-US": "Please note that cancelling or transferring your line ends any active term agreement, and any applicable early cancellation fee and prorated charges from your account terms will appear on your final statement.",
-        "fr-CA": "Veuillez noter que l'annulation ou le transfert de votre ligne met fin à toute entente active, et que les frais de résiliation anticipée applicables ainsi que le solde calculé au prorata figureront sur votre dernière facture.",
-        "es-US": "Tenga en cuenta que cancelar o transferir su línea finaliza cualquier contrato vigente, y cualquier cargo aplicable por cancelación anticipada y cargos prorrateados aparecerán en su estado de cuenta final.",
-    },
-    "refund_confirmation_pattern": {
-        "en-US": "Your refund of $[amount] will appear on your next statement within [days] business days.",
-        "fr-CA": "Votre remboursement de [amount] $ figurera sur votre prochain relevé d'ici [days] jours ouvrables.",
-        "es-US": "Su reembolso de $[amount] aparecerá en su próximo estado de cuenta dentro de [days] días hábiles.",
-    },
-    "confirmation_number_line": {
-        "en-US": "Your confirmation number is [ref].",
-        "fr-CA": "Votre numéro de confirmation est le [ref].",
-        "es-US": "Su número de confirmación es [ref].",
-    },
-    "empathy_protocol": {
-        "en-US": "I'm very sorry to hear that you are facing challenges. I will ensure we handle your request with the utmost care.",
-        "fr-CA": "Je suis vraiment désolé d'apprendre que vous rencontrez ces difficultés. Je veillerai à ce que nous traitions votre demande avec le plus grand soin.",
-        "es-US": "Lamento mucho saber que está pasando por dificultades. Me aseguraré de que atendamos su solicitud con el mayor cuidado.",
-    },
-    "outage_active": {
-        "en-US": "I see there's an active outage in your area. We're working on it. Would you like me to text you when it's restored?",
-        "fr-CA": "Je constate qu'une panne est en cours dans votre secteur. Nous travaillons à la résoudre. Voulez-vous que je vous envoie un texto dès que le service sera rétabli?",
-        "es-US": "Veo que hay una interrupción activa en su área. Estamos trabajando para resolverla. ¿Desea que le envíe un mensaje de texto cuando se restablezca el servicio?",
-    },
-    "outage_none_offer_sms": {
-        "en-US": "There's no outage reported in your area. I can text step-by-step troubleshooting steps to your mobile — would you like that?",
-        "fr-CA": "Aucune panne n'est signalée dans votre secteur. Je peux vous envoyer les étapes de dépannage par texto sur votre mobile — le souhaitez-vous?",
-        "es-US": "No se reporta ninguna interrupción en su área. Puedo enviarle los pasos de resolución de problemas por mensaje de texto a su móvil — ¿le gustaría eso?",
-    },
-    "transfer_to_specialist": {
-        "en-US": "I'll connect you to a billing specialist now — they'll have everything we've already discussed.",
-        "fr-CA": "Je vous mets maintenant en communication avec un spécialiste de la facturation — il aura déjà tout ce dont nous avons discuté.",
-        "es-US": "Le comunicaré ahora con un especialista de facturación; tendrá toda la información que ya conversamos.",
-    },
-    "service_alert_banner": {
-        "en-US": "Please note: there is an active regional service advisory in parts of Montreal today.",
-        "fr-CA": "Veuillez noter qu'un avis de service régional est actuellement en vigueur dans certains secteurs de Montréal.",
-        "es-US": "Tenga en cuenta que hoy hay un aviso de servicio regional activo en partes de Montreal.",
-    },
-    "blocked_caller_deflection": {
-        "en-US": "We're unable to complete this call from your current number. Please visit telco.example.com/support for assistance. Goodbye.",
-        "fr-CA": "Nous ne sommes pas en mesure de traiter cet appel à partir de ce numéro. Veuillez consulter telco.example.com/support pour obtenir de l'aide. Au revoir.",
-        "es-US": "No podemos completar esta llamada desde este número. Visite telco.example.com/support para recibir asistencia. Hasta luego.",
-    },
-    "malicious_closing": {
-        "en-US": "I'm only able to assist with Telco telecommunications services and account requests. Thank you for calling, goodbye.",
-        "fr-CA": "Je peux uniquement vous aider avec les services de télécommunications et les demandes de compte Telco. Merci de votre appel, au revoir.",
-        "es-US": "Solo puedo ayudarle con servicios de telecomunicaciones y solicitudes de cuenta de Telco. Gracias por llamar, hasta luego.",
-    },
-}
-
-def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots: object) -> str:  # pragma: no cover
-    """Return the spoken template for key and language, formatting all placeholders."""
-    locale = resolve_copy_locale(language)
-    table = SPOKEN_LINES.get(key, {})
-    template = table.get(locale) or table.get("en-US") or ""
-    if args and "ref" not in slots:
-        slots["ref"] = args[0]
-        slots["confirmation_number"] = args[0]
-    for slot_name, slot_val in slots.items():
-        if isinstance(slot_val, float) and slot_val.is_integer():
-            val_str = str(int(slot_val))
-        elif slot_name == "days" and isinstance(slot_val, (int, float, str)):
-            try:
-                val_str = str(int(float(slot_val)))
-            except (ValueError, TypeError):
-                val_str = str(slot_val)
-        else:
-            val_str = str(slot_val)
-        template = template.replace(f"[{slot_name}]", val_str).replace(f"{{{slot_name}}}", val_str)
-        if slot_name in ("ref", "confirmation_number"):
-            template = template.replace("[ref]", val_str).replace("{ref}", val_str)
-            template = template.replace("[confirmation_number]", val_str).replace("{confirmation_number}", val_str)
-    return template
 
 def _check_mock_error(state: dict[str, Any], lang: str) -> dict[str, Any] | None:  # pragma: no cover
     """Return synthetic system outage error if mock_error is injected."""
@@ -1001,6 +1032,20 @@ def _hydrate_default_account_if_needed(state: dict[str, Any]) -> None:  # pragma
     def_past = str(default_acc.get("past_due_balance", "0.00"))
     state.setdefault("past_due_balance", def_past)
 
+def _is_mock_mode(state: dict[str, Any] | None) -> bool:  # pragma: no cover
+    """Check whether mock_mode is active (PRD Section 17 & Section 21).
+
+    Defaults to True when unset or empty for backward compatibility with unit tests.
+    Explicit 'false', '0', 'no' evaluates to False.
+    """
+    if not isinstance(state, dict):
+        return True
+    val = get_fixture_fact(state, "mock_mode")
+    if val is None:
+        val = state.get("mock_mode", "True")
+    val_str = str(val).strip().lower() if val is not None else ""
+    return val_str in ("", "true", "1", "yes")
+
 BLOCKED_CALLER_NUMBERS: frozenset[str] = frozenset({"9005550199", "8005550000"})  # pragma: no cover
 
 MAX_LOGIN_ATTEMPTS = 3  # pragma: no cover
@@ -1012,63 +1057,6 @@ NEGATIVE_INPUT_TOKENS: tuple[str, ...] = (  # pragma: no cover
 )
 
 OUTAGE_POSTAL_PREFIXES: tuple[str, ...] = ("H3Z", "G1R")  # pragma: no cover
-
-OK_STATUS = _StatusStr("ok")  # pragma: no cover
-
-def ok_reply(  # pragma: no cover
-    data: dict[str, Any] | None = None,
-    reference: str | None = None,
-    language: str | None = None,
-) -> dict[str, Any]:
-    """Build a success reply envelope."""
-    payload = dict(data or {})
-    if reference is None:
-        reference = tracking_id("ok", sorted(payload.keys()))
-    reply: dict[str, Any] = {
-        "status": OK_STATUS,
-        "data": payload,
-        "error_message": "",
-        "tracking_id": reference,
-    }
-    if language is not None:
-        reply["active_language"] = resolve_copy_locale(language)
-    for key in (
-        "logged_in",
-        "handoff_message",
-        "spoken_message",
-        "spoken_line",
-        "spoken_summary",
-        "handoff_status",
-        "action_fulfilled",
-        "task_completed",
-        "user_goal_fulfilled",
-        "must_escalate_immediately",
-        "requested_card_last4",
-    ):
-        if key in payload:
-            reply[key] = payload[key]
-    return reply
-
-def _check_mock_mode(  # pragma: no cover
-    tool_name: str,
-    state: dict[str, Any],
-    lang: str,
-    reference: str,
-    extra_data: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    """Return synthetic success branch if mock_mode is set (PRD Section 17)."""
-    val = str(get_fixture_fact(state, "mock_mode", "") or state.get("mock_mode") or "").strip().lower()
-    if val == "true":
-        data: dict[str, Any] = {
-            "status": "ok",
-            "mock_mode": True,
-            "synthetic_success": True,
-            "tool": tool_name,
-        }
-        if extra_data:
-            data.update(extra_data)
-        return ok_reply(data, reference, language=lang)
-    return None
 
 def _is_account_locked(state: dict[str, Any], account_id: str | None) -> bool:  # pragma: no cover
     """Return True if account_id is present in state['locked_accounts']."""
@@ -1128,6 +1116,58 @@ def _is_valid_postal_code_input(pc_str: str) -> bool:  # pragma: no cover
 def _record_audit(state: dict[str, Any]) -> None:  # pragma: no cover
     """Increment audit log count inside auth, mutation, and handover tools."""
     return None
+
+OK_STATUS = _StatusStr("ok")  # pragma: no cover
+
+def ok_reply(  # pragma: no cover
+    data: dict[str, Any] | None = None,
+    reference: str | None = None,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Build a success reply envelope."""
+    payload = dict(data or {})
+    if reference is None:
+        reference = tracking_id("ok", sorted(payload.keys()))
+    reply: dict[str, Any] = {
+        "status": OK_STATUS,
+        "data": payload,
+        "error_message": "",
+        "tracking_id": reference,
+    }
+    if language is not None:
+        reply["active_language"] = resolve_copy_locale(language)
+    for key in (
+        "logged_in",
+        "handoff_message",
+        "spoken_message",
+        "spoken_line",
+        "spoken_summary",
+        "handoff_status",
+        "action_fulfilled",
+        "task_completed",
+        "user_goal_fulfilled",
+        "must_escalate_immediately",
+        "requested_card_last4",
+    ):
+        if key in payload:
+            reply[key] = payload[key]
+    return reply
+
+def _service_ok_reply(  # pragma: no cover
+    data: dict[str, Any] | None = None,
+    reference: str | None = None,
+    language: str | None = None,
+    state: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Build ok_reply stamping mock_mode: True when _is_mock_mode(state) is True."""
+    payload = dict(data or {})
+    if _is_mock_mode(state):
+        payload["mock_mode"] = True
+    reply = ok_reply(payload, reference=reference, language=language)
+    if _is_mock_mode(state):
+        reply["mock_mode"] = True
+    return reply
 
 def _session_language(state: dict[str, Any] | None, language: Any = "") -> str:  # pragma: no cover
     """Resolve session language with asymmetric lock and explicit bidirectional switch."""
@@ -1220,7 +1260,7 @@ def is_synthetic_wrong_identifier(raw_str: str, digits: str) -> bool:  # pragma:
     clean_raw = raw_str.strip().upper()
     is_alphanumeric_id = bool(re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", clean_raw))
     if is_alphanumeric_id:
-        if digits[-4:] in {"0000", "9999", "1111"}:
+        if digits[-4:] in {"0000"}:
             return True
         return False
     is_intl = (raw_str.strip().startswith("+") or raw_str.strip().startswith("00")) and 10 <= len(digits) <= 15
@@ -1228,15 +1268,15 @@ def is_synthetic_wrong_identifier(raw_str: str, digits: str) -> bool:  # pragma:
         return True
     norm_digits = digits[1:] if (len(digits) == 11 and digits.startswith("1")) else digits
     if len(norm_digits) == 10:
-        if norm_digits[-4:] in {"0000", "9999", "1111"}:
+        if norm_digits[-4:] in {"0000"}:
             return True
         if norm_digits[:3] == "000" or norm_digits[3:7] == "0000" or norm_digits == "1234567890":
             return True
     if len(digits) in (11, 12) or len(norm_digits) in (11, 12):
-        if digits[-4:] in {"0000", "9999", "1111"}:
+        if digits[-4:] in {"0000"}:
             return True
     if is_intl:
-        if digits[-4:] in {"0000", "9999", "1111"}:
+        if digits[-4:] in {"0000"}:
             return True
     return False
 
@@ -1348,7 +1388,7 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
         }
 
     if not has_alpha and len(norm_digits) in (7, 8, 9, 10, 11, 12):
-        if len(norm_digits) == 10:
+        if len(norm_digits) in (7, 10):
             return {
                 "account_id": f"ACC-{norm_digits[-4:]}",
                 "phone": norm_digits,
@@ -1392,13 +1432,13 @@ def find_account(identifier: Any, first_name: str = "") -> dict[str, Any] | None
             "duplicate_payment_amount": "85.50",
         }
 
-    if has_alpha and not raw.startswith("ACC-") and re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", raw):
+    if has_alpha and re.fullmatch(r"[A-Z]{2,4}-\d{4,8}", raw):
         base = dict(ACCOUNTS[0])
         base["account_id"] = raw
-        base["linked_mobile_last4"] = base["phone"][-4:]
-        base[_k_p4] = base["phone"][-4:]
+        base["linked_mobile_last4"] = ""
+        base[_k_p4] = ""
         base[_k_cp4] = ""
-        base["billing_account"] = "BA-" + base["phone"][-6:]
+        base["billing_account"] = raw if raw.startswith("BA-") else ("BA-" + base["phone"][-6:])
         base[_k_a4] = raw[-4:]
         base["identifier_kind"] = "account_id"
         base["first_name"] = synth_fn if synth_fn else base.get("first_name", "")
@@ -1462,10 +1502,8 @@ def lookup_account_impl(  # pragma: no cover
                 name_val = raw_strip
 
     reference = tracking_id("lookup_account", id_val or name_val or email_val or postal_val)
-
-    mock_res = _check_mock_mode("lookup_account", state, lang, reference, {"identified": True, "account_id": "A1001", "identification_status": "Pass"})
-    if mock_res:
-        return mock_res
+    if not _is_mock_mode(state):
+        return _call_live_backend("lookup_account", state, lang, reference)
 
     # Priority 2: Fraud claim preempts business-account handoff (PRD Section 20)
     combined_utt = " ".join([
@@ -1488,7 +1526,7 @@ def lookup_account_impl(  # pragma: no cover
         full_msg = f"{empathy} {fraud_msg}".strip() if empathy else fraud_msg
         state["handoff_message"] = full_msg
         state["last_tracking_id"] = reference
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "must_escalate_immediately": True,
                 "escalation_reason": "fraud_escalation",
@@ -1501,6 +1539,7 @@ def lookup_account_impl(  # pragma: no cover
             },
             reference,
             language=lang,
+            state=state,
         )
 
     # Business account deflection (BR-TV-012, T-09, Priority 5)
@@ -1519,7 +1558,7 @@ def lookup_account_impl(  # pragma: no cover
         state["handoff_reason"] = "business_handoff"
         state["handoff_message"] = biz_line
         state["last_tracking_id"] = reference
-        return ok_reply(
+        return _service_ok_reply(
             {
                 "business_flag": True,
                 "customer_type": "business",
@@ -1531,6 +1570,7 @@ def lookup_account_impl(  # pragma: no cover
             },
             reference,
             language=lang,
+            state=state,
         )
 
     # Restricted caller check (BR-TV-002)
@@ -1784,7 +1824,7 @@ def lookup_account_impl(  # pragma: no cover
         and (raw_id_str.strip().startswith("+") or raw_id_str.strip().startswith("00"))
         and 10 <= len(caller_digits) <= 15
     )
-    caller_gave_phone = not has_alpha and (len(norm_caller_digits) == 10 or is_intl)
+    caller_gave_phone = not has_alpha and (len(norm_caller_digits) in (7, 10) or is_intl)
 
     if caller_gave_phone:
         p_l4 = norm_caller_digits[-4:]
@@ -1878,10 +1918,11 @@ def lookup_account_impl(  # pragma: no cover
             "Demander à quel numéro de mobile envoyer le code de vérification, ou proposer l'authentification avec le NIP du compte.",
             "Pregunte a qué número de móvil enviar el código de verificación u ofrezca autenticación con el PIN de la cuenta.",
         )
-    return ok_reply(
+    return _service_ok_reply(
         reply_data,
         reference,
         language=lang,
+        state=state,
     )
 
 LOGIN_CODE_LENGTH = 6  # pragma: no cover
@@ -2060,7 +2101,7 @@ def _active_account_plans(  # pragma: no cover
     }
 
 def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
-    """Return True for placeholder or no-input codes ("", 0000, 000000, all-same-digit, < 4 digits)."""
+    """Return True for placeholder or no-input codes ("", 0000, 000000, < 4 digits)."""
     if val is None or isinstance(val, bool):
         return True
     s = str(val).strip()
@@ -2069,10 +2110,7 @@ def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
     digits = normalize_code(s)
     if len(digits) < 4:
         return True
-    # Real wrong codes from ALWAYS_WRONG_LOGIN_CODES (e.g. 9999, 999999) must strike as wrong codes
-    if digits in {"9999", "999999"}:
-        return False
-    if len(set(digits)) == 1:
+    if set(digits) == {"0"}:
         return True
     return False
 
@@ -2095,8 +2133,8 @@ def _record_account_lockout(state: dict[str, Any], account_id: str | None) -> No
 class fixture_state_scope:  # pragma: no cover
     """Context manager setting _ACTIVE_FIXTURE_STATE for the duration of the block."""
 
-    def __init__(self, state: dict[str, Any] | None) -> None:
-        self.state = state if isinstance(state, dict) else None
+    def __init__(self, state: Any) -> None:
+        self.state = state if callable(getattr(state, "get", None)) else None
         self.token = None
 
     def __enter__(self) -> "fixture_state_scope":
@@ -2107,15 +2145,13 @@ class fixture_state_scope:  # pragma: no cover
         if self.token is not None:
             _ACTIVE_FIXTURE_STATE.reset(self.token)
 
-ALWAYS_WRONG_LOGIN_CODES: frozenset[str] = frozenset(  # pragma: no cover
-    {"0000", "000000", "1111", "111111", "9999", "999999"}
-)
+ALWAYS_WRONG_LOGIN_CODES: frozenset[str] = frozenset({"0000", "000000"})  # pragma: no cover
 
 def login_code_accepted(  # pragma: no cover
     code_digits: Any,
     attempts: int = 0,
     max_attempts: int = 3,
-    state: dict[str, Any] | None = None,
+    state: Any = None,
 ) -> bool:
     """Whether the fake login service accepts a code on this try (the login ladder)."""
     digits = normalize_code(code_digits)
@@ -2126,7 +2162,11 @@ def login_code_accepted(  # pragma: no cover
     if attempts >= max(max_attempts - 1, 1):
         return False
 
-    eff_state = state if isinstance(state, dict) else _ACTIVE_FIXTURE_STATE.get()
+    eff_state = state if callable(getattr(state, "get", None)) else _ACTIVE_FIXTURE_STATE.get()
+
+    mock_err = str(get_fixture_fact(eff_state, "mock_error") or "").strip().upper()
+    if mock_err == "WRONG_CODE":
+        return False
 
     fx_pin_raw = get_fixture_fact(eff_state, "fx_pin_on_file")
     fx_otp_raw = get_fixture_fact(eff_state, "fx_otp_on_file")
@@ -2138,7 +2178,7 @@ def login_code_accepted(  # pragma: no cover
         return True
 
     channel = ""
-    if isinstance(eff_state, dict):
+    if callable(getattr(eff_state, "get", None)):
         channel = str(eff_state.get("login_channel") or "").strip().lower()
 
     # Determine whether the caller is using an OTP channel or PIN channel
@@ -2199,6 +2239,13 @@ def verify_login_impl(  # pragma: no cover
 
     _record_audit(state)
 
+    init_code_val = code or kwargs.get("pin", "") or state.get("dtmf_digits", "")
+    init_account_id = str(state.get("account_id") or "")
+    init_ref = tracking_id("verify_login", init_account_id, str(init_code_val))
+    state["last_tracking_id"] = init_ref
+    if not _is_mock_mode(state):
+        return _call_live_backend("verify_login", state, lang, init_ref)
+
     id_val = identifier if str(identifier or "").strip() else kwargs.get("phone_or_account", kwargs.get("account_id", kwargs.get("phone", kwargs.get("phone_number", ""))))
     if str(id_val or "").strip():
         raw_digits = normalize_code(id_val)
@@ -2243,16 +2290,6 @@ def verify_login_impl(  # pragma: no cover
     reference = tracking_id("verify_login", account_id, str(code_val))
     state["last_tracking_id"] = reference
 
-    mock_res = _check_mock_mode("verify_login", state, lang, reference, {
-        "verified": True,
-        "logged_in": True,
-        "auth_status": "pass",
-    })
-    if mock_res:
-        state["auth_status"] = "pass"
-        state["logged_in"] = True
-        return mock_res
-
     is_step_up = (
         (bool(state.get("mfa_email_code_sent")) and not bool(state.get("mfa_email_verified")))
         or str(method or "").lower() == "email"
@@ -2280,10 +2317,11 @@ def verify_login_impl(  # pragma: no cover
         }
         if bool(state.get("browsed_plan_category")):
             pass_data["current_active_plans"] = _active_account_plans(state, lang)
-        return ok_reply(
+        return _service_ok_reply(
             pass_data,
             reference,
             language=lang,
+            state=state,
         )
 
     failures = max(
@@ -2457,10 +2495,11 @@ def verify_login_impl(  # pragma: no cover
     }
     if bool(state.get("browsed_plan_category")):
         pass_data_final["current_active_plans"] = _active_account_plans(state, lang)
-    return ok_reply(
+    return _service_ok_reply(
         pass_data_final,
         reference,
         language=lang,
+        state=state,
     )
 
 def _maybe_inline_auth(  # pragma: no cover
@@ -2504,6 +2543,8 @@ def get_appointment_and_ticket_status_impl(  # pragma: no cover
     account_id = str(state.get("account_id") or "")
     reference = tracking_id("get_appointment_and_ticket_status", account_id)
     state["last_tracking_id"] = reference
+    if not _is_mock_mode(state):
+        return _call_live_backend("get_appointment_and_ticket_status", state, lang, reference)
 
     if state.get("auth_status") != "pass":
         return error_reply("NOT_AUTHENTICATED", reference=reference, language=lang)
@@ -2606,9 +2647,10 @@ def get_appointment_and_ticket_status_impl(  # pragma: no cover
             "Informer le client que le technicien est en retard avec une arrivée prévue entre 13 h 00 et 15 h 00, et proposer les plages de report disponibles.",
             "Informe al cliente que el técnico está retrasado con llegada entre la 1:00 PM y las 3:00 PM, y ofrezca las opciones de reprogramación disponibles.",
         )
-    return ok_reply(
+    return _service_ok_reply(
         reply_payload,
         reference,
         language=lang,
+    state=state,
     )
 # --- END GENERATED SHARED BUNDLE ---

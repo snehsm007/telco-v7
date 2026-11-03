@@ -25,7 +25,7 @@ from lib.services import (
 
 
 def test_three_strike_login_lockout_and_direct_code_entry(monkeypatch) -> None:
-    session = SimpleNamespace(state={"account_id": "A1001", "phone_last4": "0143"})
+    session = SimpleNamespace(state={"account_id": "A1001", "phone_last4": "0143", "fx_pin_on_file": "4321"})
     for mod in (
         lookup_tool,
         send_code_tool,

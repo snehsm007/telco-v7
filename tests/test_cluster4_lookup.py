@@ -151,7 +151,7 @@ def test_mismatched_second_identifier_on_already_identified_account_resets_ident
     assert state["account_id"] == "A1001"
 
     # Mismatched phone on subsequent lookup
-    r_phone = lookup_account_impl(identifier="5145559999", state=state)
+    r_phone = lookup_account_impl(identifier="5145550000", state=state)
     assert r_phone["status"] == "error"
     assert r_phone["error"] == "NOT_FOUND"
     assert state["identified"] is False

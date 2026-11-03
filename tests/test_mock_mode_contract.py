@@ -189,9 +189,9 @@ def test_handover_to_person_mock_mode_false_completes_cleanly() -> None:
 
 def test_mock_mode_preserves_business_rules_and_fixtures() -> None:
     """Verify mock_mode=True preserves wrong-PIN, business deflection, and $25 refund cap."""
-    # 1. PIN verification: valid PIN succeeds with no override, fails when fx_pin_on_file="8374"
+    # 1. PIN verification: valid PIN (including 1111) succeeds with no override, fails when fx_pin_on_file="8374"
     state_default = {"account_id": "ACC-0001", "phone_last4": "0143", "mock_mode": "True"}
-    pass_reply = svc.verify_login_impl(code="4321", state=state_default)
+    pass_reply = svc.verify_login_impl(code="1111", state=state_default)
     assert pass_reply["status"] == "ok"
     assert pass_reply["data"]["auth_status"] == "pass"
 
@@ -202,7 +202,7 @@ def test_mock_mode_preserves_business_rules_and_fixtures() -> None:
         "fx_pin_on_file": "8374",
         "fixtures": {"fx_pin_on_file": "8374"},
     }
-    fail_reply = svc.verify_login_impl(code="4321", state=state_mismatch)
+    fail_reply = svc.verify_login_impl(code="1111", state=state_mismatch)
     assert fail_reply["status"] == "error"
     assert fail_reply["error"] == "WRONG_CODE"
 
