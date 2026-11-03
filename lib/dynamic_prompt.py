@@ -117,6 +117,11 @@ _FRENCH_MARKERS = frozenset(
         "ligne",
         "changer",
         "payer",
+        "allô",
+        "allo",
+        "cellulaire",
+        "cell",
+        "nip",
     }
 )
 
@@ -853,16 +858,23 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
     has_state = callable(state_get)
 
     is_locked = bool(state_dict.get("language_locked", False)) if has_state else False
-    locked = (
-        str(
-            state_dict.get("language")
-            or state_dict.get("fx_language")
-            or state_dict.get("preferred_language")
-            or ""
-        ).strip()
+    fx_lang = (
+        str(state_dict.get("fx_language") or "").strip()
         if has_state
         else ""
     )
+    if fx_lang:
+        locked = resolve_locale(fx_lang)
+    else:
+        locked = (
+            str(
+                state_dict.get("language")
+                or state_dict.get("preferred_language")
+                or ""
+            ).strip()
+            if has_state
+            else ""
+        )
     if locked:
         locked = resolve_locale(locked)
     else:
@@ -955,6 +967,10 @@ def build_language_sheet(locale: str, agent_name: str = "router") -> str:
         lines.append(
             "3. Emit the verbatim lines above word-for-word whenever their trigger fires, filling [amount] and [days] from tool output only."
         )
+        if loc == "fr-CA":
+            lines.append(
+                "4. Canadian French Register and Vocabulary (fr-CA): Use authentic French-Canadian register (français canadien / québécois) throughout the entire conversation. Always address the caller formally with 'vous' (vouvoiement). Incorporate Canadian French regional norms and terminology naturally: use 'courriel' (never 'e-mail' or 'email'), 'cellulaire' (never 'portable'), 'forfait' (plan), 'facture' (bill), 'NIP' (numéro d'identification personnel, never 'code PIN'). Use natural, warm Canadian openings such as 'Bonjour' or 'Allô'. Understand and tolerate French-Canadian regional idioms and colloquialisms from the caller (such as 'c\'est-tu', 'merci ben', 'mon cell', 'pantoute', 'icitte') while maintaining polite, professional Canadian French in all your replies. Never emit European French anglicisms or standard European French phrasing that conflicts with Canadian French norms."
+            )
     else:
         lines.append("### Canonical Templates:")
         for k in keys:

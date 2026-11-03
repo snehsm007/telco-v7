@@ -924,12 +924,26 @@ def error_reply(  # pragma: no cover
     reference: str | None = None,
     data: dict[str, Any] | None = None,
     language: str | None = None,
+    state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build an error reply envelope with localized messaging."""
     if code not in ERROR_CODES:
         raise ValueError(f"unknown error code {code!r}; add it to ERROR_CODES first")
-    if not language and data and callable(getattr(data, "get", None)):
-        language = data.get("language") or data.get("fx_language") or data.get("preferred_language")
+    if not language:
+        if state and callable(getattr(state, "get", None)):
+            language = (
+                state.get("explicit_language_switch")
+                or state.get("fx_language")
+                or state.get("language")
+                or state.get("preferred_language")
+            )
+        elif data and callable(getattr(data, "get", None)):
+            language = (
+                data.get("explicit_language_switch")
+                or data.get("fx_language")
+                or data.get("language")
+                or data.get("preferred_language")
+            )
     loc = resolve_copy_locale(language)
     loc_defaults = LOCALIZED_ERROR_DEFAULTS.get(loc, LOCALIZED_ERROR_DEFAULTS["en-US"])
     default_msg, default_action = loc_defaults.get(
@@ -951,9 +965,8 @@ def error_reply(  # pragma: no cover
         "error_message": msg,
         "agent_action": action,
         "tracking_id": reference,
+        "active_language": loc,
     }
-    if language is not None:
-        reply["active_language"] = loc
     if "lockout_triggered" in payload:
         reply["lockout_triggered"] = payload["lockout_triggered"]
     for key in (
@@ -2689,9 +2702,9 @@ def cancel_or_port_out_service_impl(  # pragma: no cover
     )
     agent_action = localized_text(
         lang,
-        "Read the contract cancellation disclosure to the caller and request their explicit confirmation to proceed.",
-        "Lisez la divulgation de résiliation de contrat à l'appelant et demandez sa confirmation explicite pour continuer.",
-        "Lea la divulgación de cancelación de contrato al cliente y solicite su confirmación explícita para continuar.",
+        "Read the contract cancellation disclosure to the caller FIRST, then request their explicit confirmation to proceed.",
+        "Lisez la divulgation de résiliation de contrat à l'appelant EN PREMIER, puis demandez sa confirmation explicite pour continuer.",
+        "Lea la divulgación de cancelación de contrato al cliente PRIMERO, luego solicite su confirmación explícita para continuar.",
     )
 
     if not disclosure_given or not is_conf:

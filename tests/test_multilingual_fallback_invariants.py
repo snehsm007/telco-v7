@@ -213,3 +213,106 @@ def test_enforce_handover_and_closing_utterance_localized() -> None:
 
     closing_es = enforce_closing_utterance("resolved", language="es-US")
     assert "gracias" in closing_es.lower() or "excelente" in closing_es.lower()
+
+
+def test_no_english_only_fallback_templates_exist() -> None:
+    """Verify that no English-only fallback, silence, or error template exists for non-English locales."""
+    for loc in ("fr-CA", "es-US"):
+        # 1. Spoken fallback and reprompt templates
+        for key in CORE_FALLBACK_KEYS:
+            text = spoken_line(key, loc)
+            en_text = spoken_line(key, "en-US")
+            assert text, f"Empty fallback template for {key} in {loc}"
+            assert text != en_text, f"English-only fallback template for {key} in {loc}: {text!r}"
+            # Ensure no common untranslated English leakage phrases
+            low = text.lower()
+            assert "i apologize" not in low, f"Untranslated English in {key}[{loc}]: {text}"
+            assert "please hold" not in low, f"Untranslated English in {key}[{loc}]: {text}"
+            assert "our system" not in low, f"Untranslated English in {key}[{loc}]: {text}"
+
+        # 2. Localized error defaults for every known error code
+        assert loc in LOCALIZED_ERROR_DEFAULTS, f"Missing {loc} in LOCALIZED_ERROR_DEFAULTS"
+        for code, (en_msg, en_act) in LOCALIZED_ERROR_DEFAULTS["en-US"].items():
+            loc_tuple = LOCALIZED_ERROR_DEFAULTS[loc].get(code)
+            assert loc_tuple is not None, f"Missing localized error default for {code} in {loc}"
+            loc_msg, loc_act = loc_tuple
+            assert loc_msg, f"Empty error message for {code} in {loc}"
+            assert loc_act, f"Empty agent action for {code} in {loc}"
+            assert loc_msg != en_msg, f"English-only error message for {code} in {loc}: {loc_msg!r}"
+
+        # 3. error_reply helper returns localized defaults and active_language
+        rep_from_lang = error_reply("WRONG_PIN", language=loc)
+        assert rep_from_lang["active_language"] == loc
+        assert rep_from_lang["error_message"] != LOCALIZED_ERROR_DEFAULTS["en-US"]["WRONG_PIN"][0]
+
+        rep_from_data = error_reply("WRONG_PIN", data={"fx_language": loc})
+        assert rep_from_data["active_language"] == loc
+        assert rep_from_data["error_message"] != LOCALIZED_ERROR_DEFAULTS["en-US"]["WRONG_PIN"][0]
+
+        rep_from_state = error_reply("WRONG_PIN", state={"fx_language": loc})
+        assert rep_from_state["active_language"] == loc
+        assert rep_from_state["error_message"] != LOCALIZED_ERROR_DEFAULTS["en-US"]["WRONG_PIN"][0]
+
+
+def test_french_canadian_register_in_dynamic_sheet() -> None:
+    """Verify that build_language_sheet injects authentic French-Canadian register and vocabulary without overfitting."""
+    sheet_fr = build_language_sheet("fr-CA", agent_name="router")
+    assert '<active_language_sheet locale="fr-CA" language="Canadian French">' in sheet_fr
+    assert "Canadian French Register and Vocabulary (fr-CA)" in sheet_fr
+
+    # French-Canadian regional terminology
+    assert "courriel" in sheet_fr
+    assert "cellulaire" in sheet_fr
+    assert "forfait" in sheet_fr
+    assert "facture" in sheet_fr
+    assert "NIP" in sheet_fr
+
+    # Openings and register
+    assert "Bonjour" in sheet_fr
+    assert "Allô" in sheet_fr
+    assert "vous" in sheet_fr
+
+    # Tolerated caller idioms
+    assert "c'est-tu" in sheet_fr
+    assert "merci ben" in sheet_fr
+    assert "mon cell" in sheet_fr
+
+    # Anti-overfitting: no phone numbers, account IDs, prices, or hardcoded balances in instruction
+    assert not re.search(r"\$\d+", sheet_fr), "Found hardcoded price in language sheet"
+    assert not re.search(r"\b\d{3}-\d{3}-\d{4}\b", sheet_fr), "Found hardcoded phone in language sheet"
+    assert not re.search(r"\bACC-\d+\b", sheet_fr), "Found hardcoded account ID in language sheet"
+
+    # English sheet must not contain French-Canadian register rule
+    sheet_en = build_language_sheet("en-US", agent_name="router")
+    assert "Canadian French Register" not in sheet_en
+
+
+def test_contract_cancellation_disclosure_exact_wording_and_ordering() -> None:
+    """Verify exact PRD verbatim wording for contract disclosure and strict speech-hygiene pass-through."""
+    # PRD exact strings
+    en_expected = (
+        "Please note that cancelling or transferring your line ends any active term agreement, "
+        "and any applicable early cancellation fee and prorated charges from your account terms "
+        "will appear on your final statement."
+    )
+    fr_expected = (
+        "Veuillez noter que l'annulation ou le transfert de votre ligne met fin à toute entente active, "
+        "et que les frais de résiliation anticipée applicables ainsi que le solde calculé au prorata "
+        "figureront sur votre dernière facture."
+    )
+
+    assert spoken_line("contract_cancellation_fee_disclosure", "en-US") == en_expected
+    assert spoken_line("contract_cancellation_fee_disclosure", "fr-CA") == fr_expected
+
+    # Speech hygiene must not truncate or alter either disclosure
+    cleaned_en = clean_agent_speech(en_expected, session_params={"language": "en-US"})
+    assert cleaned_en == en_expected, f"clean_agent_speech mutated EN disclosure: {cleaned_en}"
+
+    cleaned_fr = clean_agent_speech(fr_expected, session_params={"language": "fr-CA"})
+    assert cleaned_fr == fr_expected, f"clean_agent_speech mutated FR disclosure: {cleaned_fr}"
+
+    # Verify account agent instruction mandates reciting disclosure FIRST before asking confirmation
+    account_instruction = (APP_DIR / "agents" / "account" / "instruction.txt").read_text(encoding="utf-8")
+    assert "FIRST before asking the confirmation question" in account_instruction
+    assert "FIRST before anything else" in account_instruction
+

@@ -5492,9 +5492,9 @@ def cancel_or_port_out_service_impl(
     )
     agent_action = localized_text(
         lang,
-        "Read the contract cancellation disclosure to the caller and request their explicit confirmation to proceed.",
-        "Lisez la divulgation de résiliation de contrat à l'appelant et demandez sa confirmation explicite pour continuer.",
-        "Lea la divulgación de cancelación de contrato al cliente y solicite su confirmación explícita para continuar.",
+        "Read the contract cancellation disclosure to the caller FIRST, then request their explicit confirmation to proceed.",
+        "Lisez la divulgation de résiliation de contrat à l'appelant EN PREMIER, puis demandez sa confirmation explicite pour continuer.",
+        "Lea la divulgación de cancelación de contrato al cliente PRIMERO, luego solicite su confirmación explícita para continuar.",
     )
 
     if not disclosure_given or not is_conf:

@@ -171,6 +171,27 @@ _FALLBACK_LEAKAGE_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (  # p
         ),
         "tool_error_apology",
     ),
+    (
+        re.compile(
+            r"Our system is currently having trouble processing that request\.?\s*(?:Let me connect you with a representative who can assist\.?)?",
+            re.IGNORECASE,
+        ),
+        "tool_error_apology",
+    ),
+    (
+        re.compile(
+            r"I apologize,?\s+our system is experiencing technical (?:difficulties|issues)\.?\s*(?:Let me connect you with a representative who can assist\.?)?",
+            re.IGNORECASE,
+        ),
+        "tool_error_apology",
+    ),
+    (
+        re.compile(
+            r"I'm having trouble with that request\.?\s*(?:Let me connect you with a representative who can assist\.?)?",
+            re.IGNORECASE,
+        ),
+        "tool_error_apology",
+    ),
 )
 
 _LAST4_CONTEXT_RE = re.compile(  # pragma: no cover
@@ -353,6 +374,26 @@ def resolve_copy_locale(language: str | None) -> str:  # pragma: no cover
         return "fr-CA"
     if loc == "es-US":
         return "es-US"
+    return "en-US"
+
+def resolve_session_speech_locale(session_params: Any) -> str:  # pragma: no cover
+    """Resolve the active speech locale from session parameters, prioritizing explicit switches and fixture language."""
+    if not callable(getattr(session_params, "get", None)):
+        return "en-US"
+    explicit = str(session_params.get("explicit_language_switch") or "").strip()
+    if explicit:
+        return resolve_locale(explicit)
+    fx_lang = str(session_params.get("fx_language") or "").strip()
+    if fx_lang:
+        return resolve_locale(fx_lang)
+    lang = str(session_params.get("language") or "").strip()
+    if lang and resolve_locale(lang) != "en-US":
+        return resolve_locale(lang)
+    pref = str(session_params.get("preferred_language") or "").strip()
+    if pref and resolve_locale(pref) != "en-US":
+        return resolve_locale(pref)
+    if lang:
+        return resolve_locale(lang)
     return "en-US"
 
 SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
@@ -617,13 +658,7 @@ def clean_agent_speech(  # pragma: no cover
 
         cleaned = _LAST4_CONTEXT_RE.sub(_replace_non_card_last4, cleaned)
 
-    session_lang = ""
-    if callable(getattr(session_params, "get", None)):
-        session_lang = (
-            str(session_params.get("language") or "").strip()
-            or str(session_params.get("fx_language") or "").strip()
-            or str(session_params.get("preferred_language") or "").strip()
-        )
+    session_lang = resolve_session_speech_locale(session_params)
     loc = resolve_copy_locale(session_lang)
     if loc in ("fr-CA", "es-US"):
         for pattern, key in _FALLBACK_LEAKAGE_REPLACEMENTS:
@@ -711,11 +746,8 @@ def enforce_handover_utterance(  # pragma: no cover
 
     reason = ""
     target_queue = ""
-    lang = (
-        params.get("language")
-        or params.get("fx_language")
-        or params.get("preferred_language")
-    )
+    session_lang = resolve_session_speech_locale(params)
+    lang = session_lang
     is_business = bool(params.get("business_flag"))
     for args in tool_args_list:
         if callable(getattr(args, "get", None)):
@@ -724,7 +756,9 @@ def enforce_handover_utterance(  # pragma: no cover
             if args.get("target_queue"):
                 target_queue = str(args.get("target_queue")).lower()
             if args.get("language"):
-                lang = args.get("language")
+                arg_l = str(args.get("language")).strip()
+                if arg_l and (session_lang == "en-US" or resolve_locale(arg_l) != "en-US"):
+                    lang = arg_l
             if args.get("is_business"):
                 is_business = True
 
