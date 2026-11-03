@@ -112,9 +112,9 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "es-US": "Esta llamada puede ser grabada con fines de calidad y capacitación.",
     },
     "id_verification_otp": {
-        "en-US": "For your security, I just sent a 6-digit code to that number — please read it back to me.",
-        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code à 6 chiffres à ce numéro — veuillez me le lire.",
-        "es-US": "Por su seguridad, acabo de enviar un código de 6 dígitos a ese número; por favor léamelo.",
+        "en-US": "For your security, I just sent a 6-digit code to that number — please read it back to me. You can also provide your 4-digit account PIN.",
+        "fr-CA": "Pour votre sécurité, je viens d'envoyer un code à 6 chiffres à ce numéro — veuillez me le lire. Vous pouvez également me donner votre NIP de compte à 4 chiffres.",
+        "es-US": "Por su seguridad, acabo de enviar un código de 6 dígitos a ese número; por favor léamelo. También puede proporcionar su PIN de cuenta de 4 dígitos.",
     },
     "id_verification_email_otp": {
         "en-US": "For your security, I just sent a 6-digit verification code to your backup email address on file — please read it back to me.",
@@ -424,7 +424,7 @@ LOCALIZED_ERROR_DEFAULTS: dict[str, dict[str, tuple[str, str]]] = {  # pragma: n
         ),
         "NOT_AUTHENTICATED": (
             "The caller is not authenticated for this operation.",
-            "Verify the caller's identity with send_login_code and verify_login, then retry.",
+            "Ask the caller for their 4-digit account PIN or 6-digit verification code, and call verify_login before retrying this operation.",
         ),
         "PAST_DUE_BALANCE_REQUIRED": (
             "A past due balance must be paid before service can be restored.",
@@ -590,7 +590,7 @@ LOCALIZED_ERROR_DEFAULTS: dict[str, dict[str, tuple[str, str]]] = {  # pragma: n
         ),
         "NOT_AUTHENTICATED": (
             "Le client n'est pas authentifié pour cette opération.",
-            "Vérifier l'identité du client avec send_login_code et verify_login, puis réessayer.",
+            "Demander au client son NIP de compte à 4 chiffres ou son code de vérification à 6 chiffres, et appeler verify_login avant de réessayer.",
         ),
         "PAST_DUE_BALANCE_REQUIRED": (
             "Le solde en souffrance doit être réglé avant de rétablir le service.",
@@ -756,7 +756,7 @@ LOCALIZED_ERROR_DEFAULTS: dict[str, dict[str, tuple[str, str]]] = {  # pragma: n
         ),
         "NOT_AUTHENTICATED": (
             "El cliente no está autenticado para esta operación.",
-            "Verifique la identidad del cliente con send_login_code y verify_login, luego reintente.",
+            "Pida al cliente su PIN de cuenta de 4 dígitos o su código de verificación de 6 dígitos, y llame a verify_login antes de reintentar.",
         ),
         "PAST_DUE_BALANCE_REQUIRED": (
             "El saldo vencido debe pagarse antes de restaurar el servicio.",
@@ -1989,18 +1989,19 @@ def send_login_code_impl(  # pragma: no cover
             state["caller_provided_phone_last4"] = caller_l4
             state["phone_last4"] = caller_l4
 
-        l_res = lookup_account_impl(identifier=id_val, email=caller_email, language=lang, state=state)
-        if l_res.get("status") == "error":
-            return l_res
+        if not (state.get("account_id") or state.get("identified")):
+            l_res = lookup_account_impl(identifier=id_val, email=caller_email, language=lang, state=state)
+            if l_res.get("status") == "error":
+                return l_res
     if caller_email and "@" in caller_email:
         state["contact_email"] = caller_email
-        if not state.get("account_id"):
+        if not (state.get("account_id") or state.get("identified")):
             l_res = lookup_account_impl(email=caller_email, language=lang, state=state)
             if l_res.get("status") == "error":
                 return l_res
         state["contact_email"] = caller_email
 
-    if not state.get("account_id"):
+    if not (state.get("account_id") or state.get("identified")):
         if not explicit_session:
             _hydrate_default_account_if_needed(state)
         else:

@@ -69,7 +69,7 @@ Knowledgeable, safety-first, transparent, and concise. Present clear plan shortl
         When identified: call {@TOOL: send_login_code} with:
         - channel: sms
         - language: the active language code
-        Then emit verbatim id_verification_otp from <active_language_sheet>.
+        Then emit verbatim id_verification_otp from <active_language_sheet>. If the caller asks to proceed or claims to be verified without providing digits, re-prompt for their 4-digit account PIN or 6-digit verification code before calling sensitive sales or order tools.
       </action>
     </step>
     <step name="Code Resend Or Alternate Channel">

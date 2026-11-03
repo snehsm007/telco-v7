@@ -1393,18 +1393,19 @@ def send_login_code_impl(
             state["caller_provided_phone_last4"] = caller_l4
             state["phone_last4"] = caller_l4
 
-        l_res = lookup_account_impl(identifier=id_val, email=caller_email, language=lang, state=state)
-        if l_res.get("status") == "error":
-            return l_res
+        if not (state.get("account_id") or state.get("identified")):
+            l_res = lookup_account_impl(identifier=id_val, email=caller_email, language=lang, state=state)
+            if l_res.get("status") == "error":
+                return l_res
     if caller_email and "@" in caller_email:
         state["contact_email"] = caller_email
-        if not state.get("account_id"):
+        if not (state.get("account_id") or state.get("identified")):
             l_res = lookup_account_impl(email=caller_email, language=lang, state=state)
             if l_res.get("status") == "error":
                 return l_res
         state["contact_email"] = caller_email
 
-    if not state.get("account_id"):
+    if not (state.get("account_id") or state.get("identified")):
         if not explicit_session:
             _hydrate_default_account_if_needed(state)
         else:
@@ -3063,7 +3064,7 @@ def process_refund_or_dispute_impl(
 
     amt_disp = display_amount(amt_dec)
 
-    if amt_dec > limit_dec:
+    if claim_kind != "duplicate_payment" and amt_dec > limit_dec:
         tkt = tracking_id("DSP", account_id, amt_disp)
         state["dispute_ticket_id"] = tkt
         state["handoff_reason"] = "refund_threshold_exceeded"

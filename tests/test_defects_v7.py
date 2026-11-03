@@ -123,13 +123,13 @@ def test_defect_2_outage_refund_within_threshold_auto_approved():
     assert state["current_balance"] == "41.45"
 
 
-def test_defect_2_duplicate_payment_above_threshold_escalates():
+def test_defect_2_general_dispute_above_threshold_escalates():
     state = {"auth_status": "pass", "account_id": "A1001"}
-    # Explicit duplicate payment request for $150.00 > $25.00 cap
+    # Discretionary billing dispute for $150.00 > $25.00 cap must escalate to specialist
     res = process_refund_or_dispute_impl(
         amount="150.00",
-        reason="I paid twice by mistake",
-        dispute_type="duplicate_payment",
+        reason="Incorrect monthly charges",
+        dispute_type="billing_dispute",
         state=state,
     )
     assert res["status"] == "ok"
@@ -138,17 +138,19 @@ def test_defect_2_duplicate_payment_above_threshold_escalates():
     assert res["data"]["escalation_reason"] == "refund_threshold_exceeded"
 
 
-def test_defect_2_duplicate_payment_within_threshold_approved():
-    state = {"auth_status": "pass", "account_id": "A1001", "current_balance": "50.00"}
+def test_defect_2_duplicate_payment_approved_without_discretionary_cap():
+    state = {"auth_status": "pass", "account_id": "A1001", "current_balance": "100.00"}
+    # Duplicate payments are refunded in full without hitting the $25 discretionary credit cap (PRD M3 & CUJ-2)
     res = process_refund_or_dispute_impl(
-        amount="20.00",
-        reason="paid twice",
+        amount="85.50",
+        reason="I paid twice by mistake",
         dispute_type="duplicate_payment",
         state=state,
     )
     assert res["status"] == "ok"
     assert res["data"]["approved"] is True
-    assert res["data"]["applied_amount"] == "20.00"
+    assert res["data"]["applied_amount"] == "85.50"
+    assert res["data"]["refund_type"] == "duplicate_payment"
 
 
 # ============================================================================
