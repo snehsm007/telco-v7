@@ -642,3 +642,54 @@ def test_detect_active_call_language_explicit_switch_from_french() -> None:
     # Locked French switches to English on explicit switch request
     assert detect_active_call_language({"language": "fr-CA"}, req) == "en-US"
 
+
+def test_detect_utterance_language_french_stt_noisy_openings_bug5() -> None:
+    """Verifies Bug 5: Turn-1 noisy speech-to-text French openings lock fr-CA."""
+    # Classic fraud opening with punctuation and accents
+    assert detect_utterance_language("Quelqu'un a piraté mon compte", "en-US") == "fr-CA"
+    # Unaccented and apostrophe-split variant
+    assert detect_utterance_language("Quelquun a pirate mon compte", "en-US") == "fr-CA"
+    # Noisy STT transcription with general vocabulary (no proper nouns)
+    assert detect_utterance_language("Quelqu'un a peur de ma ligne", "en-US") == "fr-CA"
+    assert detect_utterance_language("Quelqu'un a volé ma carte", "en-US") == "fr-CA"
+    assert detect_utterance_language("Fraude sur ma carte", "en-US") == "fr-CA"
+    assert detect_utterance_language("Je veux changer ma ligne", "en-US") == "fr-CA"
+    assert detect_utterance_language("Je veux payer par carte", "en-US") == "fr-CA"
+
+    # Verify all 12 expanded markers contribute to French language detection
+    expanded_markers = [
+        "quelqu'un",
+        "quelqu",
+        "quelquun",
+        "piraté",
+        "pirate",
+        "volé",
+        "fraude",
+        "peur",
+        "carte",
+        "ligne",
+        "changer",
+        "payer",
+    ]
+    for marker in expanded_markers:
+        assert detect_utterance_language(f"Bonjour {marker}", "en-US") == "fr-CA"
+
+    # Verify English sentences with common words are NOT falsely detected as French
+    assert detect_utterance_language("Hello I need help with my account", "en-US") == "en-US"
+    assert detect_utterance_language("Someone stole my card please help", "en-US") == "en-US"
+    assert detect_utterance_language("I want to change my plan and pay bill", "en-US") == "en-US"
+
+
+def test_detect_active_call_language_french_stt_opening() -> None:
+    """Verifies detect_active_call_language locks fr-CA on Turn 1 French STT opening."""
+    req = SimpleNamespace(
+        contents=[
+            SimpleNamespace(
+                role="user",
+                parts=[SimpleNamespace(text="Quelqu'un a piraté mon compte")],
+            )
+        ]
+    )
+    assert detect_active_call_language({}, req) == "fr-CA"
+
+

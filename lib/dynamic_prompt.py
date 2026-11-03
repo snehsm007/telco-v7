@@ -105,6 +105,18 @@ _FRENCH_MARKERS = frozenset(
         "problème",
         "connexion",
         "fonctionne",
+        "quelqu'un",
+        "quelqu",
+        "quelquun",
+        "piraté",
+        "pirate",
+        "volé",
+        "fraude",
+        "peur",
+        "carte",
+        "ligne",
+        "changer",
+        "payer",
     }
 )
 
