@@ -198,8 +198,6 @@ def test_telephony_german_turn_1_interception_and_turn_2_handover() -> None:
     assert resp_t1.parts[0].function_call is None
     assert state["language"] == "en-US"
     assert state["language_locked"] is False
-    assert state["unsupported_language"] == "de-DE"
-    assert state["unsupported_language_strikes"] == 1
     assert state["turn_index"] == 1
 
     # Turn 2: caller continues in German -> trilingual handoff + handover_to_person + end_session
@@ -248,8 +246,6 @@ def test_telephony_german_turn_1_interception_and_turn_2_handover() -> None:
     assert fn_calls[1].args == {"reason": "secondary_language_live_agent"}
     assert state["language"] == "en-US"
     assert state["language_locked"] is False
-    assert state["unsupported_language"] == "de-DE"
-    assert state["unsupported_language_strikes"] == 2
     assert state["handover_complete"] is True
     assert state["handoff_status"] == "escalated"
     assert state["handoff_reason"] == "secondary_language_live_agent"

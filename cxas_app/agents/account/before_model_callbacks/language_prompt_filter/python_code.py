@@ -1358,18 +1358,11 @@ def detect_language_policy(state_dict: Any, llm_request: Any) -> LanguagePolicy:
     has_locked = (
         is_locked or bool(locked and locked != "en-US") or bool(explicit_in_state)
     )
+    # Strikes are recomputed from the caller's utterance history on every turn
+    # (stateless), so no additional session variables are needed.
     strikes = 0
     caller_locale = ""
     latest_unsupported = False
-
-    if (
-        len(user_utterances) == 1
-        and has_state
-        and int(state_dict.get("unsupported_language_strikes", 0) or 0) > 0
-        and str(state_dict.get("utterance") or "") != user_utterances[0]
-    ):
-        strikes = int(state_dict.get("unsupported_language_strikes", 0) or 0)
-        caller_locale = str(state_dict.get("unsupported_language") or "")
 
     for utt in user_utterances:
         low = utt.lower()
@@ -1590,8 +1583,6 @@ def apply_language_prompt_filter(  # pragma: no cover
                     state["last_user_utterance"] = latest_utt
                     state["language"] = "en-US"
                     state["language_locked"] = False
-                    state["unsupported_language"] = policy.caller_locale
-                    state["unsupported_language_strikes"] = policy.unsupported_strikes
                 except (TypeError, AttributeError):
                     pass
             if policy.unsupported_strikes <= 1:
@@ -1654,14 +1645,9 @@ def apply_language_prompt_filter(  # pragma: no cover
                 if policy.latest_unsupported:
                     state["language"] = "en-US"
                     state["language_locked"] = False
-                    state["unsupported_language"] = policy.caller_locale
-                    state["unsupported_language_strikes"] = policy.unsupported_strikes
                 else:
                     state["language"] = locale
                     state["language_locked"] = True
-                    if "unsupported_language" in state or state.get("unsupported_language_strikes"):
-                        state["unsupported_language"] = ""
-                        state["unsupported_language_strikes"] = 0
                 state["utterance"] = latest_utt
                 state["last_user_utterance"] = latest_utt
                 state["dtmf_digits"] = extract_dtmf_digits(latest_utt)

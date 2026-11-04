@@ -120,7 +120,7 @@ def _detect_handover_language(  # pragma: no cover
                 session_context,
                 state.get("handoff_reason"),
                 state.get("last_user_utterance"),
-                state.get("utterance"),
+                state.get("request_summary"),
             )
         ),
     ).lower()
@@ -1248,7 +1248,7 @@ def handover_to_person_impl(  # pragma: no cover
             f"{summary or clean_reason} (fr)",
             f"{summary or clean_reason} (es)",
         ),
-        "ticket_or_reference_id": str(state.get("last_tracking_id") or reference),
+        "ticket_or_reference_id": str(state.get("dispute_ticket_id") or state.get("last_tracking_id") or reference),
         "after_hours": bool(is_after_hours),
     }
 

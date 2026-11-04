@@ -2744,7 +2744,7 @@ def process_refund_or_dispute_impl(  # pragma: no cover
 
     if claim_kind != "duplicate_payment" and amt_dec > limit_dec:
         tkt = tracking_id("DSP", account_id, amt_disp)
-        state["last_tracking_id"] = tkt
+        state["dispute_ticket_id"] = tkt
         state["handoff_reason"] = "refund_threshold_exceeded"
         specialist_msg = spoken_line("transfer_to_specialist", lang)
         state["handoff_message"] = specialist_msg
