@@ -8,9 +8,7 @@
     }
   },
   "contentFilter": {
-    "bannedContentsInUserInput": [
-      "(?i)\\b(?:ignore (?:all |any )?(?:previous|prior|above) instructions|reveal (?:your |the )?system prompt|act as a linux terminal)\\b"
-    ],
+    "bannedContentsInUserInput": [],
     "bannedContentsInAgentResponse": [
       "\\b(?:\\d{4}[- ]?){3}\\d{3,4}\\b",
       "\\bfx_[a-z_]+\\b"

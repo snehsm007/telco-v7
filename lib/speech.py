@@ -173,8 +173,21 @@ _SP_FRAUD_TERMS: frozenset[str] = frozenset(
         "compromise",
         "sim_swap",
         "abuse",
+        "safety",
+        "self_harm",
+        "crisis",
     }
 )
+_CRISIS_HELPLINE_RE = re.compile(
+    r"(?i)(?:suicide\s*(?:&|and)\s*crisis\s*lifeline|call\s+or\s+text\s+.*?\b988\b|considering\s+ending\s+your\s+life)"
+)
+
+
+def detect_unhandled_crisis_helpline(text: str) -> bool:
+    """Return True if model text generated unhandled 988 / crisis helpline output."""
+    if not text:
+        return False
+    return bool(_CRISIS_HELPLINE_RE.search(text))
 _SP_SPECIALIST_TERMS: frozenset[str] = frozenset(
     {
         "refund",

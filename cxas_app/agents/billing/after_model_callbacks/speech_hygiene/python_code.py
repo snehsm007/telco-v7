@@ -38,14 +38,60 @@ def after_model_callback(
                 elif fc_name == "end_session":
                     end_session_args = dict(fc_args)
 
+    has_crisis_helpline = False
     for idx, part in enumerate(parts):
         text = getattr(part, "text", None)
         if isinstance(text, str) and text.strip():
             spoken_indices.append(idx)
+            if detect_unhandled_crisis_helpline(text):
+                has_crisis_helpline = True
             cleaned = clean_agent_speech(text, state_dict)
             if cleaned != text:
                 part.text = cleaned
                 changed = True
+
+    if has_crisis_helpline and "end_session" not in called_tools:
+        loc = resolve_copy_locale(state_dict.get("language") or "en-US")
+        msg = f"{spoken_line('empathy_protocol', loc)} {spoken_line('live_agent_handoff', loc)}"
+        cleaned_msg = clean_agent_speech(msg, state_dict)
+        if spoken_indices:
+            parts[spoken_indices[0]].text = cleaned_msg
+            for extra_idx in reversed(spoken_indices[1:]):
+                extra_part = parts[extra_idx]
+                if (
+                    isinstance(parts, list)
+                    and getattr(extra_part, "function_call", None) is None
+                    and getattr(extra_part, "function_response", None) is None
+                    and getattr(extra_part, "inline_data", None) is None
+                ):
+                    parts.pop(extra_idx)
+                else:
+                    extra_part.text = ""
+        else:
+            _part_cls = globals().get("Part")
+            new_part = (
+                _part_cls.from_text(text=cleaned_msg)
+                if _part_cls is not None and hasattr(_part_cls, "from_text")
+                else SimpleNamespace(text=cleaned_msg)
+            )
+            parts.insert(0, new_part)
+
+        if hasattr(state, "__setitem__"):
+            try:
+                state["handover_complete"] = True
+                state["handoff_status"] = "escalated"
+                state["handoff_reason"] = "safety_escalation"
+                state["handoff_message"] = msg
+            except (TypeError, AttributeError):
+                pass
+
+        _part_cls = globals().get("Part")
+        if _part_cls is not None and hasattr(_part_cls, "from_function_call"):
+            parts.append(_part_cls.from_function_call(name="end_session", args={"reason": "safety_escalation"}))
+        else:
+            parts.append(SimpleNamespace(function_call=SimpleNamespace(name="end_session", args={"reason": "safety_escalation"})))
+        called_tools.append("end_session")
+        changed = True
 
     has_handover_tool = any(
         t in ("handover_to_person", "execute_live_agent_handover")
@@ -129,7 +175,8 @@ def after_model_callback(
 
 
 # --- BEGIN GENERATED SHARED BUNDLE (edit lib/, then run `make bundle`) ---
-# uses: from lib.speech import clean_agent_speech, enforce_closing_utterance, enforce_handover_utterance
+# uses: from lib.copy import resolve_copy_locale, spoken_line
+# uses: from lib.speech import clean_agent_speech, detect_unhandled_crisis_helpline, enforce_closing_utterance, enforce_handover_utterance
 from pathlib import Path
 from typing import Any
 import re
@@ -632,6 +679,16 @@ def clean_agent_speech(  # pragma: no cover
                 cleaned = pattern.sub(replacement, cleaned)
     return cleaned
 
+_CRISIS_HELPLINE_RE = re.compile(  # pragma: no cover
+    r"(?i)(?:suicide\s*(?:&|and)\s*crisis\s*lifeline|call\s+or\s+text\s+.*?\b988\b|considering\s+ending\s+your\s+life)"
+)
+
+def detect_unhandled_crisis_helpline(text: str) -> bool:  # pragma: no cover
+    """Return True if model text generated unhandled 988 / crisis helpline output."""
+    if not text:
+        return False
+    return bool(_CRISIS_HELPLINE_RE.search(text))
+
 def enforce_closing_utterance(  # pragma: no cover
     reason: str = "resolved",
     language: str | None = "en-US",
@@ -663,6 +720,9 @@ _SP_FRAUD_TERMS: frozenset[str] = frozenset(  # pragma: no cover
         "compromise",
         "sim_swap",
         "abuse",
+        "safety",
+        "self_harm",
+        "crisis",
     }
 )
 

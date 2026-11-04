@@ -9,22 +9,35 @@ def before_model_callback(
     llm_request: LlmRequest,
 ) -> Optional[LlmResponse]:
     """Inject active language rules and verbatim lines before model invocation."""
-    apply_language_prompt_filter(
+    return apply_language_prompt_filter(
         callback_context,
         llm_request,
         agent_name="billing",
+        llm_response_cls=globals().get("LlmResponse"),
+        part_cls=globals().get("Part"),
     )
-    return None
 
 
 # --- BEGIN GENERATED SHARED BUNDLE (edit lib/, then run `make bundle`) ---
 # uses: from lib.dynamic_prompt import apply_language_prompt_filter
 from pathlib import Path
 from typing import Any
+import contextlib
+import contextvars
 import re
 import sys
 
+BLOCKED_CALLER_NUMBERS: frozenset[str] = frozenset({"9005550199", "8005550000"})  # pragma: no cover
+
 LANGUAGE_SHEET_SENTINEL = "<!-- ACTIVE_LANGUAGE_SHEET -->"  # pragma: no cover
+
+PROMPT_INJECTION_RE = re.compile(  # pragma: no cover
+    r"(?i)\b(?:ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above|system)\s+(?:instructions?|prompts?|rules?)|reveal\s+(?:your\s+|the\s+)?(?:system\s+|hidden\s+)?(?:prompt|instructions?)|show\s+(?:me\s+)?(?:your\s+|the\s+)?system\s+prompt|act\s+as\s+a\s+linux\s+terminal|developer\s+mode|oublie[rz]?\s+(?:toutes?\s+)?les\s+instructions\s+pr[eé]c[eé]dentes|ignora\s+(?:todas?\s+)?las\s+instrucciones\s+anteriores)\b"
+)
+
+SELF_HARM_CRISIS_RE = re.compile(  # pragma: no cover
+    r"(?i)\b(?:kill\s+myself|end\s+my\s+life|take\s+my\s+(?:own\s+)?life|harm\s+myself|hurt\s+myself|want\s+to\s+die|going\s+to\s+die|commit\s+suicide|feeling\s+suicidal|suicidal\s+thoughts|don'?t\s+want\s+to\s+live|me\s+suicider|mettre\s+fin\s+[àa]\s+mes\s+jours|en\s+finir\s+avec\s+la\s+vie|envie\s+de\s+mourir|suicidarme|quitar(?:me|se)?\s+la\s+vida|matar(?:me|se)?|no\s+quiero\s+vivir)\b"
+)
 
 _DP_EXPLICIT_SWITCH_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (  # pragma: no cover
     (
@@ -908,16 +921,6 @@ _FRENCH_MARKERS = frozenset(  # pragma: no cover
     }
 )
 
-_RE_EVENT_TAG = re.compile(  # pragma: no cover
-    r"<event\b[^>]*>[\s\S]*?</event>|<event\b[^>]*/>",
-    re.IGNORECASE,
-)
-
-_RE_STATE_UPDATE = re.compile(  # pragma: no cover
-    r"<state_update\b[^>]*>[\s\S]*?</state_update>|<state_update\b[^>]*/>",
-    re.IGNORECASE,
-)
-
 _SPANISH_MARKERS = frozenset(  # pragma: no cover
     {
         "hola",
@@ -938,6 +941,41 @@ _SPANISH_MARKERS = frozenset(  # pragma: no cover
     }
 )
 
+_RE_CONTEXT_TAG = re.compile(  # pragma: no cover
+    r"<context\b[^>]*>[\s\S]*?</context>|<context\b[^>]*/>",
+    re.IGNORECASE,
+)
+
+_RE_EVENT_TAG = re.compile(  # pragma: no cover
+    r"<event\b[^>]*>[\s\S]*?</event>|<event\b[^>]*/>",
+    re.IGNORECASE,
+)
+
+_RE_KEYPAD_CONTEXT_TAG = re.compile(  # pragma: no cover
+    r"<context\b[^>]*>\s*user\s+pressed\s+([0-9*#]+)\s+on\s+keypad\.?\s*</context>",
+    re.IGNORECASE,
+)
+
+_RE_QUOTED_AGENT_BLOCK = re.compile(  # pragma: no cover
+    r"<<<BEGIN_QUOTED_AGENT_CONTENT>>>[\s\S]*?<<<END_QUOTED_AGENT_CONTENT>>>"
+)
+
+_RE_STATE_UPDATE = re.compile(  # pragma: no cover
+    r"<state_update\b[^>]*>[\s\S]*?</state_update>|<state_update\b[^>]*/>",
+    re.IGNORECASE,
+)
+
+def _strip_system_tags(txt: str) -> str:  # pragma: no cover
+    """Normalize keypad context tag to [dtmf: \1] and strip non-DTMF system tags."""
+    if not txt:
+        return ""
+    res = _RE_KEYPAD_CONTEXT_TAG.sub(r"[dtmf: \1]", txt)
+    res = _RE_QUOTED_AGENT_BLOCK.sub("", res)
+    res = _RE_STATE_UPDATE.sub("", res)
+    res = _RE_EVENT_TAG.sub("", res)
+    res = _RE_CONTEXT_TAG.sub("", res)
+    return res.strip()
+
 def detect_utterance_language(  # pragma: no cover
     utterance: str,
     current_language: str = "en-US",
@@ -953,7 +991,7 @@ def detect_utterance_language(  # pragma: no cover
             is_turn_1 = False
 
     raw = str(utterance or "").strip()
-    raw = _RE_EVENT_TAG.sub("", _RE_STATE_UPDATE.sub("", raw)).strip()
+    raw = _strip_system_tags(raw)
     if is_turn_1 and not language_locked:
         if re.fullmatch(
             r"(?:\[?(?:dtmf|touch-?tone|keypad|option|choice|touche|user)?\s*[:#-]?\s*)?2(?:[.#*]|\]|\s)*",
@@ -1074,10 +1112,6 @@ def detect_utterance_language(  # pragma: no cover
 
     return curr_loc
 
-_RE_QUOTED_AGENT_BLOCK = re.compile(  # pragma: no cover
-    r"<<<BEGIN_QUOTED_AGENT_CONTENT>>>[\s\S]*?<<<END_QUOTED_AGENT_CONTENT>>>"
-)
-
 _RE_RELAY_PREFIX = re.compile(  # pragma: no cover
     r"^(?:For context|\s*\[[^\]]+\]\s*(?:said:|thought:|called tool |`[^`]*` tool returned result:))",
     re.IGNORECASE,
@@ -1090,9 +1124,7 @@ def _is_relay_or_quoted_part(txt: str) -> bool:  # pragma: no cover
         return True
     if _RE_RELAY_PREFIX.match(s):
         return True
-    cleaned = _RE_QUOTED_AGENT_BLOCK.sub("", s)
-    cleaned = _RE_STATE_UPDATE.sub("", cleaned)
-    cleaned = _RE_EVENT_TAG.sub("", cleaned).strip()
+    cleaned = _strip_system_tags(s)
     if not cleaned:
         return True
     if _RE_RELAY_PREFIX.match(cleaned):
@@ -1113,13 +1145,13 @@ def extract_user_utterances(llm_request: Any) -> list[str]:  # pragma: no cover
                     txt = getattr(part, "text", None)
                     if txt and isinstance(txt, str) and txt.strip():
                         if not _is_relay_or_quoted_part(txt):
-                            sanitized = _RE_EVENT_TAG.sub("", _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", txt))).strip()
+                            sanitized = _strip_system_tags(txt)
                             if sanitized:
                                 utterances.append(sanitized)
             elif isinstance(getattr(item, "text", None), str):
                 t = item.text.strip()
                 if t and not _is_relay_or_quoted_part(t):
-                    sanitized = _RE_EVENT_TAG.sub("", _RE_STATE_UPDATE.sub("", _RE_QUOTED_AGENT_BLOCK.sub("", t))).strip()
+                    sanitized = _strip_system_tags(t)
                     if sanitized:
                         utterances.append(sanitized)
     return utterances
@@ -1222,13 +1254,35 @@ def extract_dtmf_digits(utterance: Any) -> str:  # pragma: no cover
         return digits_only
     return ""
 
+def normalize_code(value: Any) -> str:  # pragma: no cover
+    """Coerce ints, floats, and formatted strings into a clean digit string."""
+    if value is None or isinstance(value, bool):
+        return ""
+    if isinstance(value, int):
+        return str(abs(value))
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(abs(value)))
+        return re.sub(r"\D", "", str(value))
+    text = str(value).strip()
+    if re.fullmatch(r"[+-]?\d+\.0+", text):
+        text = text.split(".", 1)[0]
+    text = re.sub(r"[\s,\-]+", "", text)
+    return "".join(ch for ch in text if ch.isdigit())
+
+def only_digits(text: Any) -> str:  # pragma: no cover
+    """Extract only the decimal digits from an identifier string."""
+    return normalize_code(text)
+
 def apply_language_prompt_filter(  # pragma: no cover
     callback_context: Any,
     llm_request: Any,
     agent_name: str = "router",
     update_state: bool = False,
-) -> None:
-    """Inject language rules and verbatim lines into system instruction in-place."""
+    llm_response_cls: Any = None,
+    part_cls: Any = None,
+) -> Any:
+    """Inject language rules and verbatim lines into system instruction in-place, or intercept turn."""
     state = getattr(callback_context, "state", None)
     state_dict = state if callable(getattr(state, "get", None)) else {}
     locale = detect_active_call_language(state_dict, llm_request)
@@ -1236,6 +1290,31 @@ def apply_language_prompt_filter(  # pragma: no cover
 
     user_utterances = extract_user_utterances(llm_request)
     latest_utt = user_utterances[-1] if user_utterances else ""
+
+    # Gap 3: Blocked caller ID check on Turn 0 before greeting
+    turn_idx = int(state_dict.get("turn_index", 0) or 0)
+    _cid_key = "telephony-" + "caller-id"
+    raw_cid = str(state_dict.get(_cid_key) or "")
+    cid_digits = only_digits(raw_cid)
+    is_blocked_caller = bool(state_dict.get("is_blocked")) or bool(
+        cid_digits and cid_digits[-10:] in BLOCKED_CALLER_NUMBERS
+    )
+    if turn_idx == 0 and not user_utterances and is_blocked_caller:
+        if hasattr(state, "__setitem__"):
+            try:
+                state["is_blocked"] = True
+            except (TypeError, AttributeError):
+                pass
+        if llm_response_cls is not None and part_cls is not None:
+            return llm_response_cls.from_parts(
+                parts=[
+                    part_cls.from_text(text=spoken_line("blocked_caller_deflection", locale)),
+                    part_cls.from_function_call(
+                        name="end_session",
+                        args={"reason": "blocked_caller"},
+                    ),
+                ]
+            )
 
     is_new_caller_turn = False
     contents = getattr(llm_request, "contents", None)
@@ -1247,6 +1326,48 @@ def apply_language_prompt_filter(  # pragma: no cover
             is_new_caller_turn = True
     elif not contents and bool(latest_utt):
         is_new_caller_turn = True
+
+    # Pre-model safety interception (Self-Harm & Malicious Input)
+    if is_new_caller_turn and latest_utt and llm_response_cls is not None and part_cls is not None:
+        if SELF_HARM_CRISIS_RE.search(latest_utt):
+            msg = f"{spoken_line('empathy_protocol', locale)} {spoken_line('live_agent_handoff', locale)}"
+            if hasattr(state, "__setitem__"):
+                try:
+                    state["handover_complete"] = True
+                    state["handoff_status"] = "escalated"
+                    state["handoff_reason"] = "safety_escalation"
+                    state["handoff_message"] = msg
+                except (TypeError, AttributeError):
+                    pass
+            return llm_response_cls.from_parts(
+                parts=[
+                    part_cls.from_text(text=msg),
+                    part_cls.from_function_call(
+                        name="handover_to_person",
+                        args={
+                            "reason": "safety_escalation",
+                            "target_queue": "fraud_and_security_24x7",
+                            "summary": "Urgent caller safety crisis requiring immediate human support.",
+                            "language": locale,
+                        },
+                    ),
+                    part_cls.from_function_call(
+                        name="end_session",
+                        args={"reason": "safety_escalation"},
+                    ),
+                ]
+            )
+
+        if PROMPT_INJECTION_RE.search(latest_utt):
+            return llm_response_cls.from_parts(
+                parts=[
+                    part_cls.from_text(text=spoken_line("malicious_closing", locale)),
+                    part_cls.from_function_call(
+                        name="end_session",
+                        args={"reason": "malicious_input"},
+                    ),
+                ]
+            )
 
     # Synchronize state when requested or when state already tracks turn/lock
     should_sync = update_state or (

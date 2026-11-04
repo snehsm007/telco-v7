@@ -250,3 +250,47 @@ def test_multipart_handover_replacement_and_append_across_queues(callback) -> No
     assert resp_inline.content.parts[1].text == ""
     assert resp_inline.content.parts[1].function_call is fc_inline
 
+
+@pytest.mark.parametrize("callback", CALLBACKS)
+def test_crisis_helpline_post_model_safety_net(callback) -> None:
+    """Verifies unhandled 988 crisis helpline model output triggers safety escalation and session end."""
+    state = {"language": "en-US"}
+    resp = SimpleNamespace(
+        content=SimpleNamespace(
+            parts=[
+                SimpleNamespace(
+                    text="If you are feeling overwhelmed, please call or text the Suicide & Crisis Lifeline at 988.",
+                    function_call=None,
+                )
+            ]
+        )
+    )
+    res = callback.after_model_callback(SimpleNamespace(state=state), resp)
+    assert res is resp
+    spoken = resp.content.parts[0].text
+    assert "facing challenges" in spoken
+    assert "representative who can help" in spoken
+    assert state.get("handover_complete") is True
+    assert state.get("handoff_status") == "escalated"
+    assert state.get("handoff_reason") == "safety_escalation"
+    assert state.get("handoff_message") == spoken
+    # Verify end_session tool was appended
+    end_part = resp.content.parts[-1]
+    assert getattr(end_part, "function_call", None) is not None
+    fc = end_part.function_call
+    name = getattr(fc, "name", "")
+    args = getattr(fc, "args", {})
+    assert name == "end_session"
+    assert args.get("reason") == "safety_escalation"
+
+
+def test_app_json_inactivity_timeout_configured() -> None:
+    """Verifies audioProcessingConfig.inactivityTimeout is set to 10s."""
+    import json
+    from pathlib import Path
+    app_json = Path(__file__).resolve().parent.parent / "cxas_app" / "app.json"
+    data = json.loads(app_json.read_text(encoding="utf-8"))
+    audio_cfg = data.get("audioProcessingConfig", {})
+    assert audio_cfg.get("inactivityTimeout") == "10s"
+
+

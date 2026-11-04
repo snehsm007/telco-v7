@@ -693,3 +693,113 @@ def test_detect_active_call_language_french_stt_opening() -> None:
     assert detect_active_call_language({}, req) == "fr-CA"
 
 
+class _MockPart:
+    def __init__(self, text=None, function_call=None):
+        self.text = text
+        self.function_call = function_call
+
+    @classmethod
+    def from_text(cls, text):
+        return cls(text=text)
+
+    @classmethod
+    def from_function_call(cls, name, args):
+        return cls(function_call=SimpleNamespace(name=name, args=args))
+
+
+class _MockResponse:
+    def __init__(self, parts):
+        self.parts = parts
+
+    @classmethod
+    def from_parts(cls, parts):
+        return cls(parts=parts)
+
+
+def test_strip_system_tags_and_context_handling() -> None:
+    """Verifies context tag stripping for silence/barge-in and preservation of DTMF."""
+    from lib.dynamic_prompt import (
+        _strip_system_tags,
+        extract_dtmf_digits,
+        extract_user_utterances,
+        detect_utterance_language,
+    )
+
+    # Keypad context tag preservation
+    assert _strip_system_tags("<context>user pressed 384490 on keypad.</context>") == "[dtmf: 384490]"
+    assert _strip_system_tags("<context>user pressed 2 on keypad</context>") == "[dtmf: 2]"
+    assert extract_dtmf_digits("<context>user pressed 384490 on keypad.</context>") == "384490"
+
+    # Non-DTMF system tags strip completely
+    assert _strip_system_tags("<context>agent speaking was interrupted by the user.</context>") == ""
+    assert _strip_system_tags("<context>no user activity detected for 10 seconds.</context>") == ""
+    assert _strip_system_tags("<context>default language: en-US</context>") == ""
+
+    # extract_user_utterances strips non-DTMF tags so silence/interruption does not lock en-US
+    req = SimpleNamespace(
+        contents=[
+            SimpleNamespace(
+                role="user",
+                parts=[SimpleNamespace(text="<context>no user activity detected for 10 seconds.</context>")],
+            )
+        ]
+    )
+    assert extract_user_utterances(req) == []
+
+    # DTMF turn-1 menu selection detects French
+    assert detect_utterance_language("<context>user pressed 2 on keypad.</context>", "en-US", is_turn_1=True) == "fr-CA"
+
+
+def test_turn_0_blocked_caller_deflection() -> None:
+    """Verifies caller ID on Turn 0 triggers immediate deflection before greeting."""
+    from lib.dynamic_prompt import apply_language_prompt_filter
+
+    state = {"telephony-caller-id": "+19005550199"}
+    req = SimpleNamespace(contents=[], config=SimpleNamespace(system_instruction="base"))
+    resp = apply_language_prompt_filter(
+        SimpleNamespace(state=state),
+        req,
+        llm_response_cls=_MockResponse,
+        part_cls=_MockPart,
+    )
+    assert resp is not None
+    assert state.get("is_blocked") is True
+    spoken = resp.parts[0].text
+    assert "unable to complete this call" in spoken
+    assert resp.parts[1].function_call.name == "end_session"
+    assert resp.parts[1].function_call.args.get("reason") == "blocked_caller"
+
+
+def test_self_harm_pre_model_interception() -> None:
+    """Verifies unambiguous self-harm input triggers immediate human handover and session end."""
+    from lib.dynamic_prompt import apply_language_prompt_filter
+
+    phrases = [
+        ("I'm going to kill myself.", "en-US", "facing challenges"),
+        ("Je veux me suicider.", "fr-CA", "difficultés"),
+        ("No quiero vivir más.", "es-US", "dificultades"),
+    ]
+    for phrase, lang, kw in phrases:
+        state = {"language": lang, "turn_index": 1}
+        req = SimpleNamespace(
+            contents=[SimpleNamespace(role="user", parts=[SimpleNamespace(text=phrase)])],
+            config=SimpleNamespace(system_instruction="base"),
+        )
+        resp = apply_language_prompt_filter(
+            SimpleNamespace(state=state),
+            req,
+            llm_response_cls=_MockResponse,
+            part_cls=_MockPart,
+        )
+        assert resp is not None, f"Expected interception for {phrase}"
+        assert kw in resp.parts[0].text
+        assert state.get("handover_complete") is True
+        assert state.get("handoff_status") == "escalated"
+        assert state.get("handoff_reason") == "safety_escalation"
+
+        tools = [p.function_call.name for p in resp.parts if getattr(p, "function_call", None)]
+        assert "handover_to_person" in tools
+        assert "end_session" in tools
+
+
+

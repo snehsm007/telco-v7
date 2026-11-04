@@ -34,7 +34,8 @@
     },
     "bargeInConfig": {
       "bargeInAwareness": true
-    }
+    },
+    "inactivityTimeout": "10s"
   },
   "defaultChannelProfile": {
     "noiseSuppressionLevel": "HIGH"
