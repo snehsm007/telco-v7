@@ -1,0 +1,229 @@
+{
+  "app_name": "projects/fde-bootcamp/locations/us/apps/36cb81a0-ab18-4887-99c7-164221aab069",
+  "timestamp": "2026-11-04T03:49:31.459426Z",
+  "gates": [
+    {
+      "gate": 1,
+      "name": "Pull, Lint and Push",
+      "status": "pass",
+      "findings": [],
+      "warnings": [],
+      "error": null
+    },
+    {
+      "gate": 2,
+      "name": "Agent hierarchy",
+      "status": "pass",
+      "findings": [
+        {
+          "root_agent": "router",
+          "agents": [
+            "account",
+            "billing",
+            "router",
+            "sales_equipment",
+            "tech_support"
+          ]
+        }
+      ],
+      "warnings": [],
+      "error": null
+    },
+    {
+      "gate": 3,
+      "name": "Tool associations",
+      "status": "pass",
+      "findings": [
+        {
+          "platform_tools": [
+            "browse_plans_and_coverage",
+            "cancel_or_port_out_service",
+            "check_regional_outage",
+            "commit_plan_or_order",
+            "execute_suspend_restore",
+            "get_appointment_and_ticket_status",
+            "get_billing_summary",
+            "handover_to_person",
+            "initiate_number_transfer",
+            "lookup_account",
+            "manage_appointment",
+            "manage_mfa_settings",
+            "manage_warranty_claim",
+            "process_bill_payment",
+            "process_refund_or_dispute",
+            "run_troubleshooting_and_sms",
+            "send_login_code",
+            "send_password_reset_sms",
+            "setup_autopay",
+            "setup_payment_arrangement",
+            "update_contact_profile",
+            "verify_login"
+          ],
+          "per_agent_tools": {
+            "account": {
+              "tools": [
+                "lookup_account",
+                "send_login_code",
+                "verify_login",
+                "send_password_reset_sms",
+                "manage_mfa_settings",
+                "execute_suspend_restore",
+                "update_contact_profile",
+                "cancel_or_port_out_service",
+                "handover_to_person",
+                "end_session"
+              ],
+              "toolsets": []
+            },
+            "billing": {
+              "tools": [
+                "lookup_account",
+                "send_login_code",
+                "verify_login",
+                "get_billing_summary",
+                "process_bill_payment",
+                "setup_payment_arrangement",
+                "setup_autopay",
+                "process_refund_or_dispute",
+                "execute_suspend_restore",
+                "handover_to_person",
+                "end_session"
+              ],
+              "toolsets": []
+            },
+            "router": {
+              "tools": [
+                "lookup_account",
+                "handover_to_person",
+                "end_session"
+              ],
+              "toolsets": []
+            },
+            "sales_equipment": {
+              "tools": [
+                "lookup_account",
+                "send_login_code",
+                "verify_login",
+                "browse_plans_and_coverage",
+                "commit_plan_or_order",
+                "initiate_number_transfer",
+                "manage_warranty_claim",
+                "handover_to_person",
+                "end_session"
+              ],
+              "toolsets": []
+            },
+            "tech_support": {
+              "tools": [
+                "lookup_account",
+                "send_login_code",
+                "verify_login",
+                "check_regional_outage",
+                "run_troubleshooting_and_sms",
+                "get_appointment_and_ticket_status",
+                "manage_appointment",
+                "manage_warranty_claim",
+                "handover_to_person",
+                "end_session"
+              ],
+              "toolsets": []
+            }
+          }
+        }
+      ],
+      "warnings": [],
+      "error": null
+    },
+    {
+      "gate": 4,
+      "name": "Callback inventory + test discovery",
+      "status": "pass",
+      "findings": [
+        {
+          "callbacks_per_agent": {
+            "account": {
+              "before_model_callbacks": 1,
+              "after_model_callbacks": 1
+            },
+            "billing": {
+              "before_model_callbacks": 1,
+              "after_model_callbacks": 1
+            },
+            "router": {
+              "before_model_callbacks": 1,
+              "after_model_callbacks": 1
+            },
+            "sales_equipment": {
+              "before_model_callbacks": 1,
+              "after_model_callbacks": 1
+            },
+            "tech_support": {
+              "before_model_callbacks": 1,
+              "after_model_callbacks": 1
+            }
+          },
+          "total": 10
+        },
+        {
+          "tests_authored": 0,
+          "tests_discoverable_by_runner": 0
+        }
+      ],
+      "warnings": [],
+      "error": null
+    },
+    {
+      "gate": 5,
+      "name": "Single-turn smoke test",
+      "status": "pass",
+      "findings": [
+        {
+          "session_id": "gate5-33f23678",
+          "status": "responded"
+        }
+      ],
+      "warnings": [],
+      "error": null
+    },
+    {
+      "gate": 6,
+      "name": "Multi-turn smoke test",
+      "status": "pass",
+      "findings": [
+        {
+          "session_id": "gate6-84b14bb3",
+          "turns": [
+            {
+              "turn": 1,
+              "text": "Hi, I need to check my current bill balance. My phone number is 514-555-0199.",
+              "status": "responded"
+            },
+            {
+              "turn": 2,
+              "text": "My 4-digit PIN is 4821.",
+              "status": "responded"
+            },
+            {
+              "turn": 3,
+              "text": "Thanks! Also, is there an internet outage in postal code H2X 1Y4?",
+              "status": "responded"
+            },
+            {
+              "turn": 4,
+              "text": "No, that's everything I needed today, thank you, goodbye!",
+              "status": "responded"
+            }
+          ]
+        }
+      ],
+      "warnings": [],
+      "error": null
+    }
+  ],
+  "overall": {
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "all_pass": true
+  }
+}
