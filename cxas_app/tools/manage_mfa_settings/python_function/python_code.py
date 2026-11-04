@@ -1042,7 +1042,7 @@ def normalize_code(value: Any) -> str:  # pragma: no cover
     return "".join(ch for ch in text if ch.isdigit())
 
 def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
-    """Return True for placeholder or no-input codes ("", 0000, 000000, < 4 digits)."""
+    """Return True for placeholder or no-input codes ("", whitespace, < 4 digits)."""
     if val is None or isinstance(val, bool):
         return True
     s = str(val).strip()
@@ -1050,8 +1050,6 @@ def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
         return True
     digits = normalize_code(s)
     if len(digits) < 4:
-        return True
-    if set(digits) == {"0"}:
         return True
     return False
 

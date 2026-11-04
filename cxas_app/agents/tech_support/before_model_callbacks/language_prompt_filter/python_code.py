@@ -1237,15 +1237,33 @@ def apply_language_prompt_filter(  # pragma: no cover
     user_utterances = extract_user_utterances(llm_request)
     latest_utt = user_utterances[-1] if user_utterances else ""
 
+    is_new_caller_turn = False
+    contents = getattr(llm_request, "contents", None)
+    if contents and isinstance(contents, (list, tuple)):
+        last_item = contents[-1]
+        last_parts = getattr(last_item, "parts", None) or ()
+        has_fn_resp = any(getattr(p, "function_response", None) is not None for p in last_parts)
+        if getattr(last_item, "role", "") == "user" and not has_fn_resp and bool(latest_utt):
+            is_new_caller_turn = True
+    elif not contents and bool(latest_utt):
+        is_new_caller_turn = True
+
     # Synchronize state when requested or when state already tracks turn/lock
     should_sync = update_state or (
         isinstance(state, dict)
-        and ("turn_index" in state or "language_locked" in state or "dtmf_digits" in state)
+        and (
+            "turn_index" in state
+            or "language_locked" in state
+            or "dtmf_digits" in state
+        )
     )
     if should_sync and hasattr(state, "__setitem__"):
         try:
             if latest_utt:
-                state["turn_index"] = int(state.get("turn_index", 0)) + 1
+                if is_new_caller_turn:
+                    state["turn_index"] = int(state.get("turn_index", 0) or 0) + 1
+                    if str(state.get("auth_status") or "").startswith("wrong_code@"):
+                        state["auth_status"] = "code_sent"
                 state["language"] = locale
                 state["language_locked"] = True
                 state["utterance"] = latest_utt

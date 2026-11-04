@@ -19,13 +19,13 @@ def test_manage_mfa_settings_placeholder_code_returns_code_not_received(monkeypa
     assert r_short["error"] == "CODE_NOT_RECEIVED"
     assert session.state["auth_failure_count"] == 0
 
-    r_zero = tool.manage_mfa_settings(verification_code="0000")
-    assert r_zero["status"] == "error"
-    assert r_zero["error"] == "CODE_NOT_RECEIVED"
-    assert "say" in r_zero["agent_action"].lower()
+    r_three = tool.manage_mfa_settings(verification_code="123")
+    assert r_three["status"] == "error"
+    assert r_three["error"] == "CODE_NOT_RECEIVED"
+    assert "say" in r_three["agent_action"].lower()
     assert session.state["auth_failure_count"] == 0
 
-    r_stepup = tool.manage_mfa_settings(step_up_code="000000")
+    r_stepup = tool.manage_mfa_settings(step_up_code="12")
     assert r_stepup["status"] == "error"
     assert r_stepup["error"] == "CODE_NOT_RECEIVED"
     assert session.state["auth_failure_count"] == 0

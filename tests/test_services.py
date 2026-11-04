@@ -172,8 +172,8 @@ def test_verify_login_direct_and_invalid_inputs() -> None:
     state: dict[str, Any] = {"account_id": "A1001"}
     assert verify_login_impl(code="12", state=state)["error"] == "CODE_NOT_RECEIVED"
     assert verify_login_impl(code="123456789012", state=state)["error"] == "INVALID_INPUT"
-    assert verify_login_impl(code="0000", state=state)["error"] == "CODE_NOT_RECEIVED"
-    assert state.get("auth_failure_count", 0) == 0
+    assert verify_login_impl(code="0000", state=state)["error"] == "WRONG_CODE"
+    assert state.get("auth_failure_count", 0) == 1
 
 
 # Kills MUTATION 3 and MUTATION 5

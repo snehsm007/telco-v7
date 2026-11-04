@@ -38,7 +38,7 @@ def test_three_strike_login_lockout_and_direct_code_entry(monkeypatch) -> None:
         monkeypatch.setattr(mod, "context", session, raising=False)
 
     # Placeholder code does not consume strikes
-    r_place = verify_login_tool.verify_login("0000")
+    r_place = verify_login_tool.verify_login("12")
     assert r_place["error"] == "CODE_NOT_RECEIVED"
     assert r_place["data"]["attempts_remaining"] == 3
 

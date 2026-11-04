@@ -153,8 +153,8 @@ def test_placeholder_code_and_zero_hardcoded_wrong_pin() -> None:
     assert is_placeholder_code("   ") is True
     assert is_placeholder_code("12") is True
     assert is_placeholder_code("123") is True
-    assert is_placeholder_code("0000") is True
-    assert is_placeholder_code("000000") is True
+    assert is_placeholder_code("0000") is False
+    assert is_placeholder_code("000000") is False
     # Non-zero repeated digits are valid codes, not placeholders
     assert is_placeholder_code("1111") is False
     assert is_placeholder_code("2222") is False

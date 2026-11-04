@@ -1699,6 +1699,21 @@ def verify_login_impl(
             },
         )
 
+    turn_idx = read_count(state, "turn_index")
+    if turn_idx > 0 and str(state.get("auth_status") or "") == f"wrong_code@{turn_idx}" and failures > 0:
+        remaining = int(max(MAX_LOGIN_ATTEMPTS - failures, 0))
+        return error_reply(
+            "WRONG_CODE",
+            reference=reference,
+            language=lang,
+            data={
+                "attempts": failures,
+                "attempts_left": remaining,
+                "attempts_remaining": remaining,
+                "lockout_triggered": False,
+            },
+        )
+
     code_str = str(code_val or "").strip()
     cleaned_code = re.sub(r"[\s,\-]+", "", code_str)
     has_letters = any(c.isalpha() for c in cleaned_code)
@@ -1786,6 +1801,8 @@ def verify_login_impl(
                         "handoff_message": spoken_line("live_agent_handoff", lang),
                     },
                 )
+            if turn_idx > 0:
+                state["auth_status"] = f"wrong_code@{turn_idx}"
             remaining = int(MAX_LOGIN_ATTEMPTS - failures)
             return error_reply(
                 "WRONG_CODE",

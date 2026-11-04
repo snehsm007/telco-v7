@@ -2101,7 +2101,7 @@ def _active_account_plans(  # pragma: no cover
     }
 
 def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
-    """Return True for placeholder or no-input codes ("", 0000, 000000, < 4 digits)."""
+    """Return True for placeholder or no-input codes ("", whitespace, < 4 digits)."""
     if val is None or isinstance(val, bool):
         return True
     s = str(val).strip()
@@ -2109,8 +2109,6 @@ def is_placeholder_code(val: Any) -> bool:  # pragma: no cover
         return True
     digits = normalize_code(s)
     if len(digits) < 4:
-        return True
-    if set(digits) == {"0"}:
         return True
     return False
 
@@ -2358,6 +2356,21 @@ def verify_login_impl(  # pragma: no cover
             },
         )
 
+    turn_idx = read_count(state, "turn_index")
+    if turn_idx > 0 and str(state.get("auth_status") or "") == f"wrong_code@{turn_idx}" and failures > 0:
+        remaining = int(max(MAX_LOGIN_ATTEMPTS - failures, 0))
+        return error_reply(
+            "WRONG_CODE",
+            reference=reference,
+            language=lang,
+            data={
+                "attempts": failures,
+                "attempts_left": remaining,
+                "attempts_remaining": remaining,
+                "lockout_triggered": False,
+            },
+        )
+
     code_str = str(code_val or "").strip()
     cleaned_code = re.sub(r"[\s,\-]+", "", code_str)
     has_letters = any(c.isalpha() for c in cleaned_code)
@@ -2445,6 +2458,8 @@ def verify_login_impl(  # pragma: no cover
                         "handoff_message": spoken_line("live_agent_handoff", lang),
                     },
                 )
+            if turn_idx > 0:
+                state["auth_status"] = f"wrong_code@{turn_idx}"
             remaining = int(MAX_LOGIN_ATTEMPTS - failures)
             return error_reply(
                 "WRONG_CODE",

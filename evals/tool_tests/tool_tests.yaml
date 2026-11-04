@@ -47,7 +47,7 @@ tests:
   - id: tt_verify_login_placeholder_code
     tool: verify_login
     args:
-      code: "000000"
+      code: "12"
     initial_state:
       account_id: A1001
       auth_status: code_sent
@@ -56,6 +56,18 @@ tests:
     expected_error: CODE_NOT_RECEIVED
     expected_state:
       auth_failure_count: 0
+  - id: tt_verify_login_all_zeros_wrong_code
+    tool: verify_login
+    args:
+      code: "000000"
+    initial_state:
+      account_id: A1001
+      auth_status: code_sent
+      auth_failure_count: 0
+    expected_status: error
+    expected_error: WRONG_CODE
+    expected_state:
+      auth_failure_count: 1
   - id: tt_verify_login_pin_ok
     tool: verify_login
     args:

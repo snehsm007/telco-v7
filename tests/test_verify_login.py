@@ -72,12 +72,65 @@ def test_verify_login_placeholder_codes_return_code_not_received_without_strike(
         state={"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0.0}
     )
     monkeypatch.setattr(tool, "context", session, raising=False)
-    for placeholder in ("", "   ", "0000", "000000", "12", "123"):
+    for placeholder in ("", "   ", "12", "123"):
         reply = tool.verify_login(code=placeholder)
         assert reply["status"] == "error"
         assert reply["error"] == "CODE_NOT_RECEIVED"
         assert "say" in reply["agent_action"].lower()
         assert session.state["auth_failure_count"] == 0.0
+
+
+def test_verify_login_all_zeros_return_wrong_code_and_strike(monkeypatch) -> None:
+    session = SimpleNamespace(
+        state={"account_id": "A1001", "auth_status": "code_sent", "auth_failure_count": 0.0}
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply1 = tool.verify_login(code="0000")
+    assert reply1["status"] == "error"
+    assert reply1["error"] == "WRONG_CODE"
+    assert session.state["auth_failure_count"] == 1
+
+    reply2 = tool.verify_login(code="000000")
+    assert reply2["status"] == "error"
+    assert reply2["error"] == "WRONG_CODE"
+    assert session.state["auth_failure_count"] == 2
+
+    reply3 = tool.verify_login(code="000000")
+    assert reply3["status"] == "error"
+    assert reply3["error"] == "TOO_MANY_ATTEMPTS"
+    assert session.state["auth_failure_count"] == 3
+
+
+def test_verify_login_blocks_same_turn_guessed_pin_retry(monkeypatch) -> None:
+    session = SimpleNamespace(
+        state={
+            "account_id": "A1001",
+            "auth_status": "code_sent",
+            "auth_failure_count": 0,
+            "turn_index": 3,
+        }
+    )
+    monkeypatch.setattr(tool, "context", session, raising=False)
+    reply1 = tool.verify_login(code="000000")
+    assert reply1["status"] == "error"
+    assert reply1["error"] == "WRONG_CODE"
+    assert session.state["auth_failure_count"] == 1
+    assert session.state["auth_status"] == "wrong_code@3"
+
+    # Same turn (turn_index still 3): LLM trying to guess default PIN "1234" is blocked!
+    reply2 = tool.verify_login(code="1234")
+    assert reply2["status"] == "error"
+    assert reply2["error"] == "WRONG_CODE"
+    assert session.state["auth_failure_count"] == 1
+    assert not session.state.get("logged_in")
+
+    # Next caller message (turn_index incremented to 4, auth_status reset to code_sent):
+    session.state["turn_index"] = 4
+    session.state["auth_status"] = "code_sent"
+    reply3 = tool.verify_login(code="1234")
+    assert reply3["status"] == "ok"
+    assert reply3["data"]["logged_in"] is True
+    assert session.state["auth_status"] == "pass"
 
 
 def test_verify_login_invalid_input(monkeypatch) -> None:
