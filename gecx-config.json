@@ -1,0 +1,9 @@
+{
+  "gcp_project_id": "fde-bootcamp",
+  "location": "us",
+  "deployed_app_id": "36cb81a0-ab18-4887-99c7-164221aab069",
+  "app_name": "snehsm-FDEBootcamp-CHI-greenfield",
+  "app_dir": "cxas_app",
+  "modality": "voice",
+  "default_channel": "audio"
+}

@@ -959,5 +959,17 @@
     "Default Safety Guardrail",
     "Default Prompt Guardrail",
     "Telco Deterministic Content Guardrail"
-  ]
+  ],
+  "evaluationMetricsThresholds": {
+    "goldenEvaluationMetricsThresholds": {
+      "turnLevelMetricsThresholds": {
+        "semanticSimilaritySuccessThreshold": 3,
+        "overallToolInvocationCorrectnessThreshold": 1.0
+      },
+      "toolMatchingSettings": {
+        "extraToolCallBehavior": "ALLOW"
+      }
+    },
+    "goldenHallucinationMetricBehavior": "ENABLED"
+  }
 }
