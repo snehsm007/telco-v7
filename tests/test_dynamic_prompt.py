@@ -211,9 +211,9 @@ def test_build_language_sheet_supported_locales() -> None:
 def test_build_language_sheet_world_languages() -> None:
     sheet_de = build_language_sheet("de-DE", agent_name="billing")
     assert LANGUAGE_SHEET_SENTINEL in sheet_de
-    assert 'locale="de-DE"' in sheet_de
-    assert "German" in sheet_de
-    assert "### Canonical Templates:" in sheet_de
+    assert 'locale="en-US"' in sheet_de
+    assert "Speak 100% natively" not in sheet_de
+    assert "Service is offered only in English, Canadian French and Spanish." in sheet_de
     assert "secondary_language_live_agent" in sheet_de
     assert "</active_language_sheet>" in sheet_de
 

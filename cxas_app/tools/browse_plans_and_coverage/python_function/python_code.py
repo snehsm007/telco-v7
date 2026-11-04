@@ -318,6 +318,14 @@ def resolve_locale(language: str | None) -> str:  # pragma: no cover
         return "ja-JP"
     if low.startswith(("ko", "korean")):
         return "ko-KR"
+    if low.startswith(("ru", "russian")):
+        return "ru-RU"
+    if low.startswith(("el", "greek")):
+        return "el-GR"
+    if low.startswith(("he", "hebrew")):
+        return "he-IL"
+    if low.startswith(("th", "thai")):
+        return "th-TH"
     m = re.match(r"^([a-zA-Z]{2,3})-([a-zA-Z0-9]{2,4})$", raw)
     if m:
         return f"{m.group(1).lower()}-{m.group(2).upper()}"
@@ -642,6 +650,11 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "en-US": "I apologize, could you please rephrase your request or share your account details so I can assist you?",
         "fr-CA": "Je vous présente mes excuses, pourriez-vous reformuler votre demande ou partager les détails de votre compte afin que je puisse vous aider ?",
         "es-US": "Le pido disculpas, ¿podría reformular su solicitud o compartir los detalles de su cuenta para que pueda ayudarle?",
+    },
+    "language_not_supported": {
+        "en-US": "I'm sorry, I can only help you in English, French, or Spanish. Which language would you like to continue in?",
+        "fr-CA": "Je suis désolé, je peux seulement vous aider en anglais, en français ou en espagnol. Dans quelle langue souhaitez-vous continuer?",
+        "es-US": "Lo siento, solo puedo ayudarle en inglés, francés o español. ¿En qué idioma desea continuar?",
     },
 }
 

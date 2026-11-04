@@ -566,3 +566,17 @@ To ensure absolute clarity across all engineering and operations stakeholders, a
 - **REST (Representational State Transfer)**: An architectural style for network communication using standard HTTP methods.
 - **SIP (Session Initiation Protocol)**: Telephony signaling protocol used for initiating, maintaining, and terminating real-time voice sessions.
 - **STT (Speech-to-Text)**: Automated speech recognition engine that transcribes spoken voice audio into text strings.
+
+---
+
+### ADR-36: PRD-Strict Unsupported-Language Policy
+- **Context**: Live TEXT `runSession` probes on the canonical app showed there was no explicit policy for callers who speak a language other than `en-US`, `fr-CA`, or `es-US` (the only PRD-supported languages configured in `cxas_app/app.json` `languageSettings.supportedLanguageCodes` and `audioProcessingConfig.synthesizeSpeechConfigs`). Behavior was emergent: languages recognized by `lib/dynamic_prompt.py:detect_utterance_language` (`de-DE`, `pt-BR`, `it-IT` by word markers; `ar`, `hi`, `ja`, `ko`, `zh` by Unicode script) were locked into `state.language` and served via the unreviewed `"Speak 100% natively and fluently in {lang_name}"` branch of `build_language_sheet`, producing unreviewed LLM translations of mandatory regulatory disclosures. Unrecognized languages (such as Cyrillic/Russian or Dutch) locked `en-US` and either looped on the English `no_match_reprompt` or inconsistently transferred to a live agent.
+- **Decision**: Enforce a PRD-strict unsupported-language policy across `lib/copy.py`, `lib/dynamic_prompt.py`, `cxas_app/global_instruction.txt`, and `suite/grader.py`:
+  1. Only `("en-US", "fr-CA", "es-US")` are supported locales (`is_supported_locale`). Expand script detection to cover Cyrillic (`ru-RU`), Greek (`el-GR`), Hebrew (`he-IL`), and Thai (`th-TH`).
+  2. Never lock an unsupported language or write an unsupported locale code into `state["language"]`. Remove the `"Speak 100% natively and fluently in {lang_name}"` branch from `build_language_sheet`.
+  3. On Strike 1 of a detected unsupported caller utterance, deterministically intercept before the LLM in `apply_language_prompt_filter` and emit the trilingual `language_not_supported` notice (`en-US` + `fr-CA` + `es-US`) with zero tool calls, leaving `language_locked = False` so the caller's next turn is freshly evaluated (including one-word language choices such as English/Français/Español).
+  4. On Strike >= 2 (consecutive unsupported turns), deterministically emit the trilingual `live_agent_handoff` line and invoke `handover_to_person(reason="secondary_language_live_agent", target_queue="multilingual_support")` and `end_session(reason="secondary_language_live_agent")` in the same turn. For Latin-script languages not recognized by the lexical detector (e.g., Dutch), inject the explicit sheet/global instruction rule so the model follows the same two-strike policy.
+- **Alternatives Considered**:
+  1. *Keep serving any Gemini language via dynamic prompt translation*: Rejected because mandatory legal/regulatory disclosures are unreviewed outside EN/FR/ES, `supportedLanguageCodes` and TTS/STT voice configs only cover EN/FR/ES, and behavior across scripts was inconsistent.
+  2. *Add German and other languages to `supportedLanguageCodes` and `synthesizeSpeechConfigs`*: Rejected because it is outside PRD Section M8 scope, which specifies only English, Canadian French, and Spanish.
+

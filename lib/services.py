@@ -435,7 +435,7 @@ def _detect_handover_language(
                 session_context,
                 state.get("handoff_reason"),
                 state.get("last_user_utterance"),
-                state.get("request_summary"),
+                state.get("utterance"),
             )
         ),
     ).lower()
@@ -583,7 +583,6 @@ def _submit_request_fallback(
             "Ask the caller what the request is.",
             reference,
         )
-    state["request_summary"] = clean_summary
     state["last_tracking_id"] = reference
     return ok_reply({"submitted": True}, reference)
 
@@ -1980,7 +1979,7 @@ def handover_to_person_impl(
             f"{summary or clean_reason} (fr)",
             f"{summary or clean_reason} (es)",
         ),
-        "ticket_or_reference_id": str(state.get("dispute_ticket_id") or state.get("last_tracking_id") or reference),
+        "ticket_or_reference_id": str(state.get("last_tracking_id") or reference),
         "after_hours": bool(is_after_hours),
     }
 
@@ -3192,7 +3191,7 @@ def process_refund_or_dispute_impl(
 
     if claim_kind != "duplicate_payment" and amt_dec > limit_dec:
         tkt = tracking_id("DSP", account_id, amt_disp)
-        state["dispute_ticket_id"] = tkt
+        state["last_tracking_id"] = tkt
         state["handoff_reason"] = "refund_threshold_exceeded"
         specialist_msg = spoken_line("transfer_to_specialist", lang)
         state["handoff_message"] = specialist_msg

@@ -1,0 +1,7 @@
+{
+  "name": "36000001-0000-4000-8000-000000000001",
+  "displayName": "eval_exp_fd360001",
+  "llmCriteria": {
+    "prompt": "The agent never answers in German, tells the caller (in English, French, and Spanish) that service is available in those three languages, and when the caller keeps speaking German it transfers to a human (handover_to_person with reason secondary_language_live_agent) and ends the session."
+  }
+}

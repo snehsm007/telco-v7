@@ -317,15 +317,6 @@
       }
     },
     {
-      "name": "request_summary",
-      "description": "Summary of user inquiry or submitted transaction.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
-        "required": []
-      }
-    },
-    {
       "name": "active_appointment_id",
       "description": "ID of currently scheduled technician or store appointment.",
       "schema": {
@@ -421,15 +412,6 @@
       "schema": {
         "type": "STRING",
         "default": "residential",
-        "required": []
-      }
-    },
-    {
-      "name": "dispute_ticket_id",
-      "description": "Ticket ID for billing dispute or waiver.",
-      "schema": {
-        "type": "STRING",
-        "default": "",
         "required": []
       }
     },
@@ -949,6 +931,24 @@
     {
       "name": "turn_index",
       "description": "Call turn counter for conversational and language inertia tracking.",
+      "schema": {
+        "type": "INTEGER",
+        "default": 0,
+        "required": []
+      }
+    },
+    {
+      "name": "unsupported_language",
+      "description": "Detected unsupported language locale code from the caller.",
+      "schema": {
+        "type": "STRING",
+        "default": "",
+        "required": []
+      }
+    },
+    {
+      "name": "unsupported_language_strikes",
+      "description": "Consecutive caller turns in an unsupported language since call start.",
       "schema": {
         "type": "INTEGER",
         "default": 0,

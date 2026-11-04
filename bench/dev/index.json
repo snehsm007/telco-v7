@@ -418,5 +418,17 @@
     "name": "sim__warranty_replacement_pixel_mic",
     "topic": "warranty",
     "language": "en"
+  },
+  {
+    "id": "VE-71",
+    "name": "sim__unsupported_language_german_handover",
+    "topic": "talk_to_a_person",
+    "language": "en"
+  },
+  {
+    "id": "VE-72",
+    "name": "sim__unsupported_language_switch_to_french",
+    "topic": "pay_bill",
+    "language": "fr"
   }
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import sys
-from typing import Any
+from typing import Any, NamedTuple
 
 if str(Path(__file__).resolve().parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -13,6 +13,7 @@ if str(Path(__file__).resolve().parent.parent) not in sys.path:
 from lib.copy import (
     AGENT_VERBATIM_KEYS,
     SPOKEN_LINES,
+    SUPPORTED_COPY_LOCALES,
     WORLD_LANGUAGE_NAMES,
     resolve_copy_locale,
     resolve_locale,
@@ -211,6 +212,17 @@ _DP_GERMAN_MARKERS = frozenset(
         "habe",
         "kann",
         "können",
+        "wie",
+        "bezahlen",
+        "zahlen",
+        "telefonnummer",
+        "aktueller",
+        "nur",
+        "spreche",
+        "verstehe",
+        "kein",
+        "keine",
+        "warum",
     }
 )
 
@@ -245,6 +257,8 @@ _DP_PORTUGUESE_MARKERS = frozenset(
         "português",
         "senha",
         "aparelho",
+        "qual",
+        "atual",
     }
 )
 
@@ -712,6 +726,14 @@ def detect_utterance_language(
         return "ko-KR"
     if re.search(r"[\u4e00-\u9fff]", utterance):
         return "zh-CN"
+    if re.search(r"[\u0400-\u04ff]", utterance):
+        return "ru-RU"
+    if re.search(r"[\u0370-\u03ff]", utterance):
+        return "el-GR"
+    if re.search(r"[\u0590-\u05ff]", utterance):
+        return "he-IL"
+    if re.search(r"[\u0e00-\u0e7f]", utterance):
+        return "th-TH"
 
     words = [w.lower() for w in cleaned.split()]
 
@@ -874,14 +896,96 @@ def extract_user_utterances(llm_request: Any) -> list[str]:
     return utterances
 
 
-def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
-    """Determine the active conversation language from state and user turns."""
+def is_supported_locale(loc: str | None) -> bool:
+    """Return True if `loc` resolves to a PRD-supported locale (en-US, fr-CA, es-US)."""
+    raw = str(loc or "").strip()
+    if not raw:
+        return False
+    if raw in SUPPORTED_COPY_LOCALES:
+        return True
+    low = raw.lower().replace("_", "-")
+    if low in ("primary", "secondary") or low.startswith(
+        (
+            "en",
+            "english",
+            "anglais",
+            "fr",
+            "french",
+            "francais",
+            "français",
+            "es",
+            "spanish",
+            "espanol",
+            "español",
+        )
+    ):
+        return resolve_locale(raw) in SUPPORTED_COPY_LOCALES
+    return False
+
+
+_LANG_CHOICE_EN: frozenset[str] = frozenset({"english", "anglais", "inglés", "ingles"})
+_LANG_CHOICE_FR: frozenset[str] = frozenset(
+    {"french", "français", "francais", "frances", "francés"}
+)
+_LANG_CHOICE_ES: frozenset[str] = frozenset(
+    {"spanish", "español", "espanol", "espagnol"}
+)
+_LANG_CHOICE_COURTESY: frozenset[str] = frozenset(
+    {
+        "please",
+        "svp",
+        "oui",
+        "yes",
+        "si",
+        "sí",
+        "ok",
+        "okay",
+        "merci",
+        "gracias",
+        "bitte",
+        "ja",
+    }
+)
+
+
+def _match_language_choice_response(utterance: str) -> str:
+    """Match one-word or polite-word language-choice answers after an unsupported turn."""
+    cleaned = re.sub(r"[0-9\W_]+", " ", str(utterance or "")).strip().lower()
+    if not cleaned:
+        return ""
+    words = cleaned.split()
+    if not words:
+        return ""
+    if all(w in (_LANG_CHOICE_EN | _LANG_CHOICE_COURTESY) for w in words) and any(
+        w in _LANG_CHOICE_EN for w in words
+    ):
+        return "en-US"
+    if all(w in (_LANG_CHOICE_FR | _LANG_CHOICE_COURTESY) for w in words) and any(
+        w in _LANG_CHOICE_FR for w in words
+    ):
+        return "fr-CA"
+    if all(w in (_LANG_CHOICE_ES | _LANG_CHOICE_COURTESY) for w in words) and any(
+        w in _LANG_CHOICE_ES for w in words
+    ):
+        return "es-US"
+    return ""
+
+
+class LanguagePolicy(NamedTuple):
+    locale: str
+    caller_locale: str
+    unsupported_strikes: int
+    latest_unsupported: bool
+
+
+def detect_language_policy(state_dict: Any, llm_request: Any) -> LanguagePolicy:
+    """Determine active supported locale and unsupported-language strike policy from state and history."""
     user_utterances = extract_user_utterances(llm_request)
     state_get = getattr(state_dict, "get", None)
     has_state = callable(state_get)
 
     is_locked = bool(state_dict.get("language_locked", False)) if has_state else False
-    locked = (
+    raw_locked = (
         str(
             state_dict.get("language")
             or state_dict.get("fx_language")
@@ -891,14 +995,23 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
         if has_state
         else ""
     )
-    if locked:
-        locked = resolve_locale(locked)
+    locked = ""
+    if raw_locked:
+        if is_supported_locale(raw_locked):
+            locked = resolve_locale(raw_locked)
+        else:
+            locked = "en-US"
+            is_locked = False
     else:
         relayed = _extract_relayed_active_language(llm_request)
         if relayed:
-            locked = relayed
+            if is_supported_locale(relayed):
+                locked = relayed
+            else:
+                locked = "en-US"
+                is_locked = False
 
-    explicit_in_state = (
+    raw_explicit = (
         str(
             state_dict.get("explicit_language_switch")
             or state_dict.get("fx_language")
@@ -907,30 +1020,69 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
         if has_state
         else ""
     )
-    if explicit_in_state:
-        explicit_in_state = resolve_locale(explicit_in_state)
+    explicit_in_state = ""
+    if raw_explicit and is_supported_locale(raw_explicit):
+        explicit_in_state = resolve_locale(raw_explicit)
 
     if not user_utterances:
-        if explicit_in_state:
-            return explicit_in_state
-        return locked if locked else "en-US"
+        base_loc = explicit_in_state or locked or "en-US"
+        return LanguagePolicy(
+            locale=base_loc,
+            caller_locale="",
+            unsupported_strikes=0,
+            latest_unsupported=False,
+        )
 
     current = explicit_in_state or locked or "en-US"
-    has_locked = is_locked or bool(locked and locked != "en-US") or bool(explicit_in_state)
+    has_locked = (
+        is_locked or bool(locked and locked != "en-US") or bool(explicit_in_state)
+    )
+    strikes = 0
+    caller_locale = ""
+    latest_unsupported = False
 
-    for idx, utt in enumerate(user_utterances):
+    if (
+        len(user_utterances) == 1
+        and has_state
+        and int(state_dict.get("unsupported_language_strikes", 0) or 0) > 0
+        and str(state_dict.get("utterance") or "") != user_utterances[0]
+    ):
+        strikes = int(state_dict.get("unsupported_language_strikes", 0) or 0)
+        caller_locale = str(state_dict.get("unsupported_language") or "")
+
+    for utt in user_utterances:
         low = utt.lower()
         switch = _dp_match_explicit_switch(low)
         if switch:
-            current = switch
-            has_locked = True
+            if is_supported_locale(switch):
+                current = switch
+                has_locked = True
+                strikes = 0
+                caller_locale = ""
+                latest_unsupported = False
+            else:
+                has_locked = False
+                strikes += 1
+                caller_locale = switch
+                latest_unsupported = True
             continue
 
-        if has_locked or idx > 0:
+        if strikes >= 1:
+            choice_loc = _match_language_choice_response(utt)
+            if choice_loc:
+                current = choice_loc
+                has_locked = True
+                strikes = 0
+                caller_locale = ""
+                latest_unsupported = False
+                continue
+
+        if has_locked:
             # Locked or mid-call: bare 2/digits or ambiguous tokens never flip language
+            latest_unsupported = False
             continue
 
-        # Turn 1 (idx == 0) and not yet locked:
+        # Not yet locked (Turn 1 or following an unsupported turn):
         raw = utt.strip()
         if re.fullmatch(
             r"(?:\[?(?:dtmf|touch-?tone|keypad|option|choice|touche|user)?\s*[:#-]?\s*)?2(?:[.#*]|\]|\s)*",
@@ -939,6 +1091,9 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
         ):
             current = "fr-CA"
             has_locked = True
+            strikes = 0
+            caller_locale = ""
+            latest_unsupported = False
         elif re.fullmatch(
             r"(?:\[?(?:dtmf|touch-?tone|keypad|option|choice|touche|user)?\s*[:#-]?\s*)?1(?:[.#*]|\]|\s)*",
             raw,
@@ -946,57 +1101,94 @@ def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
         ):
             current = "en-US"
             has_locked = True
+            strikes = 0
+            caller_locale = ""
+            latest_unsupported = False
         else:
             det = detect_utterance_language(
                 utt, current_language=current, is_turn_1=True, language_locked=False
             )
-            current = det
-            has_locked = True
+            if is_supported_locale(det):
+                current = det
+                has_locked = True
+                strikes = 0
+                caller_locale = ""
+                latest_unsupported = False
+            else:
+                strikes += 1
+                caller_locale = det
+                latest_unsupported = True
 
-    return current
+    return LanguagePolicy(
+        locale=current,
+        caller_locale=caller_locale,
+        unsupported_strikes=strikes,
+        latest_unsupported=latest_unsupported,
+    )
 
 
-def build_language_sheet(locale: str, agent_name: str = "router") -> str:
+def detect_active_call_language(state_dict: Any, llm_request: Any) -> str:
+    """Determine the active conversation language from state and user turns."""
+    return detect_language_policy(state_dict, llm_request).locale
+
+
+def build_language_sheet(
+    locale: str,
+    agent_name: str = "router",
+    policy: LanguagePolicy | None = None,
+) -> str:
     """Generate dynamic language sheet containing localized rules and verbatim lines."""
-    loc = resolve_locale(locale)
+    loc = resolve_copy_locale(locale)
     lang_name = WORLD_LANGUAGE_NAMES.get(loc, loc)
     keys = AGENT_VERBATIM_KEYS.get(agent_name, AGENT_VERBATIM_KEYS["router"])
 
-    lines = [
-        LANGUAGE_SHEET_SENTINEL,
-        f'<active_language_sheet locale="{loc}" language="{lang_name}">',
-    ]
-
-    if loc in ("en-US", "fr-CA", "es-US"):
-        lines.append("### Required Disclosures & Spoken Lines (Emit Exact Wording):")
-        for k in keys:
-            line_text = spoken_line(k, loc)
-            lines.append(f'- {k}: "{line_text}"')
-        lines.append("")
-        lines.append("### Mandatory Conversational Rules:")
-        lines.append(
-            f"1. Speak 100% in {lang_name} ({loc}). Never mix languages or repeat lines in another language."
-        )
-        lines.append(
-            f'2. Always pass language="{loc}" when calling tools (and write any free-text reason/summary in {lang_name} while keeping structural enum values unchanged).'
-        )
-        lines.append(
-            "3. Emit the verbatim lines above word-for-word whenever their trigger fires, filling [amount] and [days] from tool output only."
+    if policy is not None and policy.latest_unsupported:
+        caller_code = policy.caller_locale or "unknown"
+        caller_name = WORLD_LANGUAGE_NAMES.get(caller_code, caller_code)
+        open_tag = (
+            f'<active_language_sheet locale="{loc}" language="{lang_name}" '
+            f'caller_language="{caller_name} ({caller_code})" status="unsupported">'
         )
     else:
-        lines.append("### Canonical Templates:")
-        for k in keys:
-            line_text = spoken_line(k, "en-US")
-            lines.append(f'- {k}: "{line_text}"')
-        lines.append("")
-        lines.append("### Mandatory Conversational Rules:")
-        lines.append(
-            f"1. Speak 100% natively and fluently in {lang_name} ({loc}), translating the canonical Telco disclosures faithfully into {lang_name} with zero English mixing."
-        )
-        lines.append(
-            f'2. Pass language="{loc}" to tools; if a request cannot be completed accurately without language degradation, politely offer to connect a specialist via handover_to_person(reason="secondary_language_live_agent", language="{loc}").'
-        )
+        open_tag = f'<active_language_sheet locale="{loc}" language="{lang_name}">'
 
+    lines = [
+        LANGUAGE_SHEET_SENTINEL,
+        open_tag,
+        "### Required Disclosures & Spoken Lines (Emit Exact Wording):",
+    ]
+    for k in keys:
+        line_text = spoken_line(k, loc)
+        lines.append(f'- {k}: "{line_text}"')
+
+    if policy is not None and policy.latest_unsupported:
+        caller_code = policy.caller_locale or "unknown"
+        caller_name = WORLD_LANGUAGE_NAMES.get(caller_code, caller_code)
+        lines.append("")
+        lines.append("### Unsupported caller language:")
+        if policy.unsupported_strikes >= 2:
+            lines.append(
+                f'- Strike count: {policy.unsupported_strikes} (caller continued in {caller_name} ({caller_code})). Action: speak live_agent_handoff and call handover_to_person(reason="secondary_language_live_agent", target_queue="multilingual_support") and end_session(reason="secondary_language_live_agent") in the same turn.'
+            )
+        else:
+            lines.append(
+                f"- Strike count: {policy.unsupported_strikes} (caller spoke {caller_name} ({caller_code})). Action: speak language_not_supported in English, then French, then Spanish, and call no tools."
+            )
+
+    lines.append("")
+    lines.append("### Mandatory Conversational Rules:")
+    lines.append(
+        f"1. Speak 100% in {lang_name} ({loc}). Never mix languages or repeat lines in another language."
+    )
+    lines.append(
+        f'2. Always pass language="{loc}" when calling tools (and write any free-text reason/summary in {lang_name} while keeping structural enum values unchanged).'
+    )
+    lines.append(
+        "3. Emit the verbatim lines above word-for-word whenever their trigger fires, filling [amount] and [days] from tool output only."
+    )
+    lines.append(
+        '4. Service is offered only in English, Canadian French and Spanish. If the caller speaks any other language (even one you understand), do not answer in it: speak language_not_supported in English, then French, then Spanish, and call no tools; if the caller continues in that language on the next turn, speak live_agent_handoff and call handover_to_person(reason="secondary_language_live_agent", target_queue="multilingual_support") and end_session(reason="secondary_language_live_agent") in the same turn.'
+    )
     lines.append("</active_language_sheet>")
     return "\n".join(lines)
 
@@ -1012,8 +1204,9 @@ def apply_language_prompt_filter(
     """Inject language rules and verbatim lines into system instruction in-place, or intercept turn."""
     state = getattr(callback_context, "state", None)
     state_dict = state if callable(getattr(state, "get", None)) else {}
-    locale = detect_active_call_language(state_dict, llm_request)
-    sheet = build_language_sheet(locale, agent_name=agent_name)
+    policy = detect_language_policy(state_dict, llm_request)
+    locale = policy.locale
+    sheet = build_language_sheet(locale, agent_name=agent_name, policy=policy)
 
     user_utterances = extract_user_utterances(llm_request)
     latest_utt = user_utterances[-1] if user_utterances else ""
@@ -1054,7 +1247,7 @@ def apply_language_prompt_filter(
     elif not contents and bool(latest_utt):
         is_new_caller_turn = True
 
-    # Pre-model safety interception (Self-Harm & Malicious Input)
+    # Pre-model safety & unsupported-language interception
     if is_new_caller_turn and latest_utt and llm_response_cls is not None and part_cls is not None:
         if SELF_HARM_CRISIS_RE.search(latest_utt):
             msg = f"{spoken_line('empathy_protocol', locale)} {spoken_line('live_agent_handoff', locale)}"
@@ -1096,6 +1289,61 @@ def apply_language_prompt_filter(
                 ]
             )
 
+        if policy.latest_unsupported:
+            caller_code = policy.caller_locale or "unknown"
+            caller_lang_name = WORLD_LANGUAGE_NAMES.get(caller_code, caller_code)
+            if hasattr(state, "__setitem__"):
+                try:
+                    state["turn_index"] = int(state_dict.get("turn_index", 0) or 0) + 1
+                    state["utterance"] = latest_utt
+                    state["last_user_utterance"] = latest_utt
+                    state["language"] = "en-US"
+                    state["language_locked"] = False
+                    state["unsupported_language"] = policy.caller_locale
+                    state["unsupported_language_strikes"] = policy.unsupported_strikes
+                except (TypeError, AttributeError):
+                    pass
+            if policy.unsupported_strikes <= 1:
+                notice_msg = (
+                    f"{spoken_line('language_not_supported', 'en-US')} "
+                    f"{spoken_line('language_not_supported', 'fr-CA')} "
+                    f"{spoken_line('language_not_supported', 'es-US')}"
+                )
+                return llm_response_cls.from_parts(
+                    parts=[part_cls.from_text(text=notice_msg)]
+                )
+            handoff_msg = (
+                f"{spoken_line('live_agent_handoff', 'en-US')} "
+                f"{spoken_line('live_agent_handoff', 'fr-CA')} "
+                f"{spoken_line('live_agent_handoff', 'es-US')}"
+            )
+            if hasattr(state, "__setitem__"):
+                try:
+                    state["handover_complete"] = True
+                    state["handoff_status"] = "escalated"
+                    state["handoff_reason"] = "secondary_language_live_agent"
+                    state["handoff_message"] = handoff_msg
+                except (TypeError, AttributeError):
+                    pass
+            return llm_response_cls.from_parts(
+                parts=[
+                    part_cls.from_text(text=handoff_msg),
+                    part_cls.from_function_call(
+                        name="handover_to_person",
+                        args={
+                            "reason": "secondary_language_live_agent",
+                            "target_queue": "multilingual_support",
+                            "summary": f"Caller speaks {caller_lang_name}, which is not a supported language (English, French, Spanish).",
+                            "language": "en-US",
+                        },
+                    ),
+                    part_cls.from_function_call(
+                        name="end_session",
+                        args={"reason": "secondary_language_live_agent"},
+                    ),
+                ]
+            )
+
     # Synchronize state when requested or when state already tracks turn/lock
     should_sync = update_state or (
         isinstance(state, dict)
@@ -1112,17 +1360,26 @@ def apply_language_prompt_filter(
                     state["turn_index"] = int(state.get("turn_index", 0) or 0) + 1
                     if str(state.get("auth_status") or "").startswith("wrong_code@"):
                         state["auth_status"] = "code_sent"
-                state["language"] = locale
-                state["language_locked"] = True
+                if policy.latest_unsupported:
+                    state["language"] = "en-US"
+                    state["language_locked"] = False
+                    state["unsupported_language"] = policy.caller_locale
+                    state["unsupported_language_strikes"] = policy.unsupported_strikes
+                else:
+                    state["language"] = locale
+                    state["language_locked"] = True
+                    if "unsupported_language" in state or state.get("unsupported_language_strikes"):
+                        state["unsupported_language"] = ""
+                        state["unsupported_language_strikes"] = 0
                 state["utterance"] = latest_utt
                 state["last_user_utterance"] = latest_utt
                 state["dtmf_digits"] = extract_dtmf_digits(latest_utt)
                 switch = _dp_match_explicit_switch(latest_utt.lower())
-                if switch:
+                if switch and is_supported_locale(switch):
                     state["explicit_language_switch"] = switch
             else:
                 state["dtmf_digits"] = ""
-                if not state.get("language"):
+                if not state.get("language") or not is_supported_locale(state.get("language")):
                     state["language"] = locale
         except (TypeError, AttributeError):
             pass

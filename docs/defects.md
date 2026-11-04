@@ -189,3 +189,18 @@ Group failing evaluations by shared root cause (not one entry per evaluation). F
 - **Alternatives considered**: None on agent side.
 - **Verification (`strict 3/3 | majority >=2/3 | individual`)**: Classified as simulator non-determinism / deviation.
 
+### DEF-15: Emergent unsupported-language lock and unreviewed disclosure translation (ADR-36)
+- **Found by**: Live TEXT `runSession` multilingual probes (German, Hindi, Russian, Portuguese, Dutch) + `VE-71` (`sim__unsupported_language_german_handover`), `VE-72` (`sim__unsupported_language_switch_to_french`)
+- **Evidence**: Canonical app `d5500685-9bb1-402d-888d-ffe5409126ad` live `runSession` probes
+- **Label**: `agent`
+- **Status**: `closed`
+- **Root cause layer**: `callback / instruction` (`lib/dynamic_prompt.py`, `lib/copy.py`, `cxas_app/global_instruction.txt`)
+- **Diagnosis (all 3 judge metrics)**:
+  - *Expectations*: `detect_utterance_language` recognized non-PRD languages (`de-DE`, `pt-BR`, `hi-IN`, etc.) and locked them into `state.language`, causing `build_language_sheet` to instruct the LLM to speak 100% in that unsupported language with unreviewed translations of mandatory disclosures, while unrecognized scripts (Cyrillic/Russian) fell through to `en-US` and looped on `no_match_reprompt`.
+  - *User Goal*: Caller speaking an unsupported language was either served in an unsupported language outside PRD M8 or stuck in an English reprompt loop instead of being offered EN/FR/ES or routed to `multilingual_support`.
+  - *Hallucination*: Unreviewed ad-hoc translations of verbatim disclosures.
+- **Fix & `file:line`**: `lib/copy.py:203` (`language_not_supported`), `lib/dynamic_prompt.py:210` (`is_supported_locale`, `detect_language_policy`, `build_language_sheet`, 2-strike pre-model interception in `apply_language_prompt_filter`), `cxas_app/global_instruction.txt:19`, `suite/grader.py:85`.
+- **Alternatives considered**: (i) Keep serving any Gemini language (rejected: unreviewed mandatory disclosures + no TTS/STT coverage + inconsistent); (ii) Add German etc. to `supportedLanguageCodes` (rejected: outside PRD M8).
+- **Verification (`strict 3/3 | majority >=2/3 | individual`)**: Verified via unit tests (`tests/test_unsupported_language_policy.py`), 7 live candidate probes, and targeted smoke (`VE-71`, `VE-72`, French suite, `VE-01`).
+
+

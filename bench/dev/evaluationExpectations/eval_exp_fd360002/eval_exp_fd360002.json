@@ -1,0 +1,7 @@
+{
+  "name": "36000002-0000-4000-8000-000000000002",
+  "displayName": "eval_exp_fd360002",
+  "llmCriteria": {
+    "prompt": "After the agent's language notice, the entire remainder of the call is in French, the caller is authenticated, and the account balance from the tool output is stated."
+  }
+}

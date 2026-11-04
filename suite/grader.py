@@ -59,6 +59,11 @@ FILLER = re.compile(
 )
 EXEMPT_HANDOFF_PHRASES = (
     "i'll connect you to a representative who can help. please hold.",
+    "je vais vous mettre en communication avec un représentant qui pourra vous aider. veuillez patienter.",
+    "le comunicaré con un representante que pueda ayudarle. por favor espere.",
+    "i'm sorry, i can only help you in english, french, or spanish. which language would you like to continue in?",
+    "je suis désolé, je peux seulement vous aider en anglais, en français ou en espagnol. dans quelle langue souhaitez-vous continuer?",
+    "lo siento, solo puedo ayudarle en inglés, francés o español. ¿en qué idioma desea continuar?",
     "to get you the best support for your business account, i'll transfer you to an agent.",
     "i'll connect you to a billing specialist now — they'll have everything we've already discussed.",
     "je vous mets immédiatement en relation avec un conseiller",
@@ -67,6 +72,14 @@ EXEMPT_HANDOFF_PHRASES = (
     "enseguida lo pongo en línea con un representante",
     "lo comunico con un representante para asistirle",
     "ahora mismo lo comunico con un asesor especializado",
+)
+EXEMPT_LANGUAGE_POLICY_LINES = (
+    "i'm sorry, i can only help you in english, french, or spanish. which language would you like to continue in?",
+    "je suis désolé, je peux seulement vous aider en anglais, en français ou en espagnol. dans quelle langue souhaitez-vous continuer?",
+    "lo siento, solo puedo ayudarle en inglés, francés o español. ¿en qué idioma desea continuar?",
+    "i'll connect you to a representative who can help. please hold.",
+    "je vais vous mettre en communication avec un représentant qui pourra vous aider. veuillez patienter.",
+    "le comunicaré con un representante que pueda ayudarle. por favor espere.",
 )
 
 INTERNAL_NAME = re.compile(r"\b[a-z0-9]+(?:_[a-z0-9]+)*_(?:agent|tool)\b")
@@ -99,6 +112,10 @@ VERBATIM_SNIPPETS = {
     "id_verification_otp": "For your security, I just sent a 6-digit code to that number — please read it back to me.",
     "id_verification_pin": "For your security, I'll need to verify your identity. Please enter the 4-digit PIN you set up.",
     "live_agent_handoff": "I'll connect you to a representative who can help. Please hold.",
+    "language_not_supported": (
+        "I'm sorry, I can only help you in English, French, or Spanish. "
+        "Which language would you like to continue in?"
+    ),
     "business_handoff": (
         "To get you the best support for your business account, I'll transfer you to an agent. "
         "You'll need to use your phone keypad instead of talking to the virtual assistant. "
@@ -241,6 +258,19 @@ def detect_language(text):
 def _is_exempt_handoff(text: str) -> bool:
     norm = " ".join((text or "").lower().split())
     return any(phrase in norm for phrase in EXEMPT_HANDOFF_PHRASES)
+
+
+def _is_exempt_language_policy_turn(text: str) -> bool:
+    norm = " ".join((text or "").lower().split())
+    if not norm:
+        return False
+    rem = norm
+    matched = False
+    for line in EXEMPT_LANGUAGE_POLICY_LINES:
+        if line in rem:
+            matched = True
+            rem = rem.replace(line, " ")
+    return matched and not rem.strip()
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -396,40 +426,41 @@ def grade(transcript):
             ):
                 add("dead_air_handoff", i, text or "<empty reply after transfer>")
 
-        turn_mismatch_added = False
-        opening_turn = agent_turn_count == 1 and is_english_opening(text)
-        effective_lang = "en" if opening_turn else language
-        if effective_lang:
-            got = detect_language(text)
-            if got and got != effective_lang:
-                add(
-                    "language_mismatch",
-                    i,
-                    f"expected {effective_lang}, reply looks {got}: {text[:80]}",
-                )
-                turn_mismatch_added = True
+        if not _is_exempt_language_policy_turn(text):
+            turn_mismatch_added = False
+            opening_turn = agent_turn_count == 1 and is_english_opening(text)
+            effective_lang = "en" if opening_turn else language
+            if effective_lang:
+                got = detect_language(text)
+                if got and got != effective_lang:
+                    add(
+                        "language_mismatch",
+                        i,
+                        f"expected {effective_lang}, reply looks {got}: {text[:80]}",
+                    )
+                    turn_mismatch_added = True
 
-        sentences = _split_sentences(text)
-        if len(sentences) >= 2:
-            detected_langs = [detect_language(s) for s in sentences]
-            confident_langs = [l for l in detected_langs if l]
-            if len(set(confident_langs)) > 1:
-                add(
-                    "language_lock_per_sentence",
-                    i,
-                    f"mixed languages in one turn: {confident_langs}",
-                )
-            elif (
-                effective_lang
-                and confident_langs
-                and any(l != effective_lang for l in confident_langs)
-                and not turn_mismatch_added
-            ):
-                add(
-                    "language_lock_per_sentence",
-                    i,
-                    f"sentence language {confident_langs} != {effective_lang}",
-                )
+            sentences = _split_sentences(text)
+            if len(sentences) >= 2:
+                detected_langs = [detect_language(s) for s in sentences]
+                confident_langs = [l for l in detected_langs if l]
+                if len(set(confident_langs)) > 1:
+                    add(
+                        "language_lock_per_sentence",
+                        i,
+                        f"mixed languages in one turn: {confident_langs}",
+                    )
+                elif (
+                    effective_lang
+                    and confident_langs
+                    and any(l != effective_lang for l in confident_langs)
+                    and not turn_mismatch_added
+                ):
+                    add(
+                        "language_lock_per_sentence",
+                        i,
+                        f"sentence language {confident_langs} != {effective_lang}",
+                    )
 
         lowered = text.lower()
         leaked = [n for n in names if n in lowered] + INTERNAL_NAME.findall(lowered)

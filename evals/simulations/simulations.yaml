@@ -15,3 +15,36 @@ simulations:
     rubrics:
       - "The agent logs the caller in with a code before providing billing information."
       - "The agent states the current balance clearly."
+  - id: sim__unsupported_language_german_handover
+    cuj: CUJ-08
+    language: en-US
+    priority: P0
+    task: >-
+      Ich möchte meine Rechnung für die Telefonnummer 202-555-0143 bezahlen.
+      Speak ONLY German for the whole call, never switch languages, ignore requests
+      to pick another language, and keep asking in German about paying the bill for
+      phone 202-555-0143.
+    max_turns: 10
+    user_facts:
+      - name: phone
+        value: "202-555-0143"
+    rubrics:
+      - "The agent never answers in German and tells the caller in English, French, and Spanish that service is available in those three languages."
+      - "When the caller keeps speaking German, the agent transfers to a human (handover_to_person with reason secondary_language_live_agent) and ends the session."
+  - id: sim__unsupported_language_switch_to_french
+    cuj: CUJ-02
+    language: fr-CA
+    priority: P0
+    task: >-
+      Open in German asking to check your account balance. After the agent's language
+      notice, switch to Canadian French for the rest of the call to check the account
+      balance for phone 202-555-0143 and authenticate with the spoken PIN 1234.
+    max_turns: 10
+    user_facts:
+      - name: phone
+        value: "202-555-0143"
+      - name: pin
+        value: "1234"
+    rubrics:
+      - "After the language notice, the entire remainder of the call is in French."
+      - "The caller is authenticated and the account balance from the tool output is stated."

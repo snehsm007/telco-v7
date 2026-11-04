@@ -1,0 +1,19 @@
+{
+  "name": "36000011-0000-4000-8000-000000000011",
+  "displayName": "sim__unsupported_language_german_handover",
+  "scenario": {
+    "task": "Ich möchte meine Rechnung für die Telefonnummer 202-555-0143 bezahlen\n\nUser Guide: The user speaks ONLY German for the whole call. Start by saying 'Guten Tag, ich möchte meine Rechnung für 202-555-0143 bezahlen.' Never switch languages, ignore requests to pick another language, and on the next turn keep asking in German about paying the bill for phone 202-555-0143 ('Ich spreche nur Deutsch. Können Sie mir bitte auf Deutsch helfen, meine Rechnung für 202-555-0143 zu bezahlen?').",
+    "maxTurns": 10,
+    "evaluationExpectations": [
+      "eval_exp_fd360001"
+    ],
+    "rubrics": [],
+    "scenarioExpectations": [],
+    "userFacts": [],
+    "variableOverrides": {}
+  },
+  "tags": [
+    "public",
+    "P0"
+  ]
+}

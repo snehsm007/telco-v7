@@ -79,6 +79,14 @@ def resolve_locale(language: str | None) -> str:  # pragma: no cover
         return "ja-JP"
     if low.startswith(("ko", "korean")):
         return "ko-KR"
+    if low.startswith(("ru", "russian")):
+        return "ru-RU"
+    if low.startswith(("el", "greek")):
+        return "el-GR"
+    if low.startswith(("he", "hebrew")):
+        return "he-IL"
+    if low.startswith(("th", "thai")):
+        return "th-TH"
     m = re.match(r"^([a-zA-Z]{2,3})-([a-zA-Z0-9]{2,4})$", raw)
     if m:
         return f"{m.group(1).lower()}-{m.group(2).upper()}"
@@ -112,7 +120,7 @@ def _detect_handover_language(  # pragma: no cover
                 session_context,
                 state.get("handoff_reason"),
                 state.get("last_user_utterance"),
-                state.get("request_summary"),
+                state.get("utterance"),
             )
         ),
     ).lower()
@@ -1101,6 +1109,11 @@ SPOKEN_LINES: dict[str, dict[str, str]] = {  # pragma: no cover
         "fr-CA": "Je vous présente mes excuses, pourriez-vous reformuler votre demande ou partager les détails de votre compte afin que je puisse vous aider ?",
         "es-US": "Le pido disculpas, ¿podría reformular su solicitud o compartir los detalles de su cuenta para que pueda ayudarle?",
     },
+    "language_not_supported": {
+        "en-US": "I'm sorry, I can only help you in English, French, or Spanish. Which language would you like to continue in?",
+        "fr-CA": "Je suis désolé, je peux seulement vous aider en anglais, en français ou en espagnol. Dans quelle langue souhaitez-vous continuer?",
+        "es-US": "Lo siento, solo puedo ayudarle en inglés, francés o español. ¿En qué idioma desea continuar?",
+    },
 }
 
 def spoken_line(key: str, language: str | None = "en-US", *args: object, **slots: object) -> str:  # pragma: no cover
@@ -1235,7 +1248,7 @@ def handover_to_person_impl(  # pragma: no cover
             f"{summary or clean_reason} (fr)",
             f"{summary or clean_reason} (es)",
         ),
-        "ticket_or_reference_id": str(state.get("dispute_ticket_id") or state.get("last_tracking_id") or reference),
+        "ticket_or_reference_id": str(state.get("last_tracking_id") or reference),
         "after_hours": bool(is_after_hours),
     }
 
